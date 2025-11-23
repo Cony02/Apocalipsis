@@ -1,8 +1,10 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Html, Line, shaderMaterial } from '@react-three/drei';
-import { AlertTriangle, Info, Shield, Clock, FastForward } from 'lucide-react';
+import { OrbitControls, Html, Line } from '@react-three/drei';
+import { AlertTriangle, Info, Shield, Clock, FastForward, Target, Rocket } from 'lucide-react';
 import * as THREE from 'three';
+
+// ... (los estilos se mantienen igual)
 
 const styles = `
   html, body, #root {
@@ -12,6 +14,7 @@ const styles = `
     height: 100%;
     background-color: #000000;
     overflow: hidden;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   }
 
   .app-container {
@@ -19,7 +22,6 @@ const styles = `
     flex-direction: row;
     width: 100vw;
     height: 100vh;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   }
 
   .sidebar {
@@ -56,11 +58,11 @@ const styles = `
 
   .datos-content {
     padding: 20px;
+    flex: 1;
   }
 
   .control-panel {
-    margin-top: 20px;
-    margin-bottom: 10px;
+    margin-bottom: 20px;
     padding: 15px;
     background-color: #2f3542;
     border-radius: 8px;
@@ -114,73 +116,93 @@ const styles = `
     position: relative;
     background-color: #000005;
   }
+
+  .mission-control {
+    background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    border: 1px solid #4a90e2;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 20px 0;
+  }
+
+  .mission-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 15px;
+    color: #fff;
+  }
+
+  .mission-button {
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(135deg, #ff4757 0%, #ff6b81 100%);
+    border: none;
+    border-radius: 6px;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .mission-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(255, 71, 87, 0.4);
+  }
+
+  .mission-button:disabled {
+    background: #666;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+  }
+
+  .trajectory-info {
+    margin-top: 10px;
+    padding: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+    font-size: 0.8rem;
+  }
+
+  .success-message {
+    color: #2ed573;
+    font-weight: 600;
+    margin-top: 10px;
+    text-align: center;
+  }
+  
+  .auto-launch-info {
+    color: #4ecdc4;
+    font-size: 0.8rem;
+    text-align: center;
+    margin-top: 8px;
+    font-weight: 600;
+  }
+
+  .waiting-for-target {
+    color: #ffa502;
+    font-size: 0.8rem;
+    text-align: center;
+    margin-top: 8px;
+    font-weight: 600;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
+  }
 `;
 
-const AtmosphereMaterial = {
-  uniforms: {
-    c: { type: "f", value: 1.0 },
-    p: { type: "f", value: 3.0 },
-    glowColor: { type: "c", value: new THREE.Color(0x3399ff) },
-    viewVector: { type: "v3", value: new THREE.Vector3() }
-  },
-  vertexShader: `
-    uniform vec3 viewVector;
-    varying float intensity;
-    void main() {
-      vec3 vNormal = normalize(normalMatrix * normal);
-      vec3 vNormel = normalize(normalMatrix * viewVector);
-      intensity = pow(0.6 - dot(vNormal, vec3(0, 0, 1.0)), 4.0);
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    uniform vec3 glowColor;
-    varying float intensity;
-    void main() {
-      vec3 glow = glowColor * intensity;
-      gl_FragColor = vec4(glow, 1.0);
-    }
-  `,
-  side: THREE.BackSide,
-  blending: THREE.AdditiveBlending,
-  transparent: true
-};
-
-const SunMaterial = {
-  uniforms: {
-    time: { value: 0 },
-    color1: { value: new THREE.Color('#ffaa00') },
-    color2: { value: new THREE.Color('#ff4500') }
-  },
-  vertexShader: `
-    varying vec2 vUv;
-    varying vec3 vPosition;
-    void main() {
-      vUv = uv;
-      vPosition = position;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    uniform float time;
-    uniform vec3 color1;
-    uniform vec3 color2;
-    varying vec2 vUv;
-    varying vec3 vPosition;
-
-    float noise(vec3 p) {
-      return sin(p.x * 10.0 + time) * sin(p.y * 10.0 + time) * sin(p.z * 10.0 + time);
-    }
-
-    void main() {
-      float n = noise(vPosition + time * 0.2);
-      vec3 finalColor = mix(color1, color2, n * 0.5 + 0.5);
-      float brightness = 1.2;
-      gl_FragColor = vec4(finalColor * brightness, 1.0);
-    }
-  `
-};
-
+// --- DATOS DEL ASTEROIDE ---
 const dataDelPython = {
   "Nombre": "109P/Swift-Tuttle",
   "Diametro": 26.0,
@@ -194,6 +216,7 @@ const dataDelPython = {
   "Epoca": 2450000.5
 };
 
+// --- FUNCIONES DE ORBITA ---
 const getOrbitPoints = (a, e, i_deg, om_deg, w_deg, steps = 300) => {
   const sm_a = parseFloat(a);
   const ecc = parseFloat(e);
@@ -222,6 +245,8 @@ const getOrbitPoints = (a, e, i_deg, om_deg, w_deg, steps = 300) => {
   return points;
 };
 
+// --- COMPONENTES 3D ---
+
 function StarField({ count = 3000 }) {
   const points = useMemo(() => {
     const p = new Float32Array(count * 3);
@@ -248,37 +273,22 @@ function StarField({ count = 3000 }) {
 
 function RealisticSun() {
   const mesh = useRef();
-  const materialRef = useRef();
-
-  useFrame(({ clock }) => {
-    if (materialRef.current) {
-      materialRef.current.uniforms.time.value = clock.getElapsedTime();
-    }
-  });
 
   return (
     <group>
       <mesh ref={mesh} position={[0, 0, 0]}>
         <sphereGeometry args={[1.5, 64, 64]} />
-        <shaderMaterial
-          ref={materialRef}
-          attach="material"
-          args={[SunMaterial]}
-        />
+        <meshBasicMaterial color="#ffaa00" />
       </mesh>
       <pointLight distance={300} intensity={2.5} color="#fff0d0" decay={1} />
-      <mesh scale={[1.2, 1.2, 1.2]}>
-        <sphereGeometry args={[1.5, 32, 32]} />
-        <meshBasicMaterial color="#ffaa00" transparent opacity={0.15} side={THREE.BackSide} />
-      </mesh>
     </group>
   );
 }
 
-function RealisticEarth({ speedMultiplier }) {
+function RealisticEarth({ speedMultiplier, onPositionUpdate }) {
   const earthRadiusScale = 5;
   const earthRef = useRef();
-  const angleRef = useRef(0); 
+  const angleRef = useRef(0);
 
   const orbitPoints = useMemo(() => {
     const points = [];
@@ -296,7 +306,6 @@ function RealisticEarth({ speedMultiplier }) {
 
   useFrame((_, delta) => {
     const baseSpeed = 0.5;
-
     angleRef.current += delta * baseSpeed * speedMultiplier;
 
     const x = Math.cos(angleRef.current) * earthRadiusScale;
@@ -305,8 +314,11 @@ function RealisticEarth({ speedMultiplier }) {
     if (earthRef.current) {
       earthRef.current.position.x = x;
       earthRef.current.position.z = z;
-      
       earthRef.current.rotation.y += 0.005;
+
+      if (onPositionUpdate) {
+        onPositionUpdate([x, 0, z]);
+      }
     }
   });
 
@@ -330,18 +342,18 @@ function RealisticEarth({ speedMultiplier }) {
             shininess={20}
           />
         </mesh>
-        <mesh scale={[1.2, 1.2, 1.2]}>
-          <sphereGeometry args={[0.3, 64, 64]} />
-          <shaderMaterial
-            attach="material"
-            args={[AtmosphereMaterial]}
-            side={THREE.BackSide}
-            blending={THREE.AdditiveBlending}
-            transparent
-          />
-        </mesh>
         <Html distanceFactor={20} position={[0, 0.5, 0]}>
-          <div className="bg-blue-900/80 text-blue-100 px-2 py-0.5 rounded text-[10px] border border-blue-500 pointer-events-none select-none backdrop-blur-sm">
+          <div style={{
+            backgroundColor: 'rgba(30, 78, 140, 0.8)',
+            color: '#e0f2ff',
+            padding: '2px 8px',
+            borderRadius: '4px',
+            fontSize: '10px',
+            border: '1px solid #4a90e2',
+            pointerEvents: 'none',
+            userSelect: 'none',
+            backdropFilter: 'blur(4px)'
+          }}>
             Tierra
           </div>
         </Html>
@@ -350,30 +362,164 @@ function RealisticEarth({ speedMultiplier }) {
   );
 }
 
-function AsteroidOrbit({ data, speedMultiplier }) {
+// COMPONENTE DEL MISIL (MISMO QUE ANTES)
+function Missile({ targetPosition, onImpact, isLaunched, asteroidRef }) {
+  const missileRef = useRef();
+  const startPosition = useMemo(() => [0, 0, 0], []);
+  const impactDetected = useRef(false);
+  const trailPoints = useRef([]);
+
+  useFrame((_, delta) => {
+    if (!isLaunched || !missileRef.current || impactDetected.current) return;
+
+    const missile = missileRef.current;
+    const currentPos = missile.position.clone();
+    const target = new THREE.Vector3(...targetPosition);
+    
+    const direction = new THREE.Vector3()
+      .subVectors(target, currentPos)
+      .normalize();
+    
+    const speed = 80;
+    missile.position.add(direction.multiplyScalar(speed * delta));
+    
+    if (direction.length() > 0) {
+      missile.lookAt(missile.position.clone().add(direction));
+    }
+    
+    trailPoints.current.push({
+      position: currentPos.clone(),
+      life: 1.0
+    });
+    
+    trailPoints.current = trailPoints.current.filter(point => {
+      point.life -= delta * 3;
+      return point.life > 0;
+    });
+    
+    if (asteroidRef.current) {
+      const asteroidPos = new THREE.Vector3();
+      asteroidRef.current.getWorldPosition(asteroidPos);
+      
+      const distance = currentPos.distanceTo(asteroidPos);
+      
+      if (distance < 4) {
+        impactDetected.current = true;
+        onImpact();
+        
+        setTimeout(() => {
+          if (missileRef.current) {
+            missileRef.current.visible = false;
+          }
+        }, 100);
+      }
+    }
+    
+    if (currentPos.length() > 300) {
+      impactDetected.current = true;
+      setTimeout(() => {
+        if (missileRef.current) {
+          missileRef.current.visible = false;
+        }
+      }, 100);
+    }
+  });
+
+  React.useEffect(() => {
+    if (isLaunched) {
+      impactDetected.current = false;
+      trailPoints.current = [];
+      if (missileRef.current) {
+        missileRef.current.visible = true;
+        missileRef.current.position.set(...startPosition);
+      }
+    }
+  }, [isLaunched, startPosition]);
+
+  return (
+    <>
+      {isLaunched && (
+        <group ref={missileRef} position={startPosition}>
+          <mesh>
+            <cylinderGeometry args={[0.05, 0.1, 0.8, 8]} />
+            <meshStandardMaterial color="#ff4757" emissive="#ff0000" />
+          </mesh>
+          <pointLight 
+            color="#ff6b81" 
+            intensity={3} 
+            distance={15} 
+            decay={2} 
+          />
+          
+          {trailPoints.current.map((point, index) => (
+            <mesh key={index} position={point.position}>
+              <sphereGeometry args={[0.02 + point.life * 0.05, 4]} />
+              <meshBasicMaterial 
+                color="#ffd700" 
+                transparent 
+                opacity={point.life * 0.8}
+              />
+            </mesh>
+          ))}
+        </group>
+      )}
+    </>
+  );
+}
+
+// COMPONENTE DEL ASTEROIDE (MISMO QUE ANTES)
+function AsteroidOrbit({ data, speedMultiplier, isDeflected, onAsteroidUpdate, asteroidRef, onDistanceUpdate }) {
   const points = useMemo(() =>
     getOrbitPoints(data.Semieje_a, data.Excentricidad_e, data.Inclinacion_i, data.Nodo_Asc_om, data.Arg_Perihelio_w),
     [data]
   );
 
-  const asteroidRef = useRef();
-  const progressRef = useRef(0); 
+  const internalAsteroidRef = useRef();
+  const progressRef = useRef(0);
+  const deflectionProgress = useRef(0);
+
+  const actualRef = asteroidRef || internalAsteroidRef;
 
   useFrame((_, delta) => {
-    
     const baseSpeed = 0.05;
-
     progressRef.current = (progressRef.current + delta * baseSpeed * speedMultiplier) % 1;
 
     const idx = Math.floor(progressRef.current * points.length);
-    const p1 = points[idx] || points[0];
+    const originalPos = points[idx] || points[0];
 
-    if (p1 && asteroidRef.current) {
-      asteroidRef.current.position.set(p1[0], p1[1], p1[2]);
-      asteroidRef.current.rotation.x += 0.01;
-      asteroidRef.current.rotation.y += 0.02;
+    if (originalPos && actualRef.current) {
+      let finalPos = [...originalPos];
+      
+      if (isDeflected) {
+        deflectionProgress.current = Math.min(deflectionProgress.current + delta * 0.5, 1);
+        finalPos[0] += deflectionProgress.current * 15;
+        finalPos[1] += deflectionProgress.current * 8;
+        finalPos[2] += deflectionProgress.current * 5;
+      } else {
+        deflectionProgress.current = 0;
+      }
+      
+      actualRef.current.position.set(...finalPos);
+      actualRef.current.rotation.x += 0.01;
+      actualRef.current.rotation.y += 0.02;
+
+      if (onAsteroidUpdate) {
+        onAsteroidUpdate(finalPos);
+      }
+
+      const distanceFromCenter = Math.sqrt(
+        finalPos[0] ** 2 + finalPos[1] ** 2 + finalPos[2] ** 2
+      );
+
+      if (onDistanceUpdate) {
+        onDistanceUpdate(distanceFromCenter);
+      }
     }
   });
+
+  const asteroidColor = isDeflected ? "#2ed573" : "#888888";
+  const labelBg = isDeflected ? 'rgba(46, 213, 115, 0.8)' : 'rgba(255, 71, 87, 0.8)';
+  const labelBorder = isDeflected ? '#2ed573' : '#ff4757';
 
   return (
     <>
@@ -381,16 +527,55 @@ function AsteroidOrbit({ data, speedMultiplier }) {
         points={points}
         color="#ff4757"
         lineWidth={1}
-        opacity={0.6}
+        opacity={0.4}
         transparent
       />
 
-      <mesh ref={asteroidRef}>
+      {isDeflected && (
+        <Line
+          points={points.map((point, index) => {
+            const progress = index / points.length;
+            const deflectionAmount = progress * deflectionProgress.current * 15;
+            return [
+              point[0] + deflectionAmount,
+              point[1] + deflectionAmount * 0.8,
+              point[2] + deflectionAmount * 0.5
+            ];
+          })}
+          color="#2ed573"
+          lineWidth={2}
+          opacity={0.8}
+          transparent
+        />
+      )}
+
+      <mesh ref={actualRef}>
         <dodecahedronGeometry args={[0.6, 0]} />
-        <meshStandardMaterial color="#888888" roughness={0.8} metalness={0.2} />
+        <meshStandardMaterial 
+          color={asteroidColor}
+          roughness={0.8} 
+          metalness={0.2} 
+          emissive={isDeflected ? new THREE.Color(0x2ed573).multiplyScalar(0.3) : new THREE.Color(0x000000)}
+        />
         <Html distanceFactor={30}>
-          <div className="bg-red-600/80 text-white px-2 py-1 rounded text-xs font-bold border border-red-400 whitespace-nowrap pointer-events-none select-none flex items-center gap-1 backdrop-blur-md">
-            {data.Nombre}
+          <div style={{
+            backgroundColor: labelBg,
+            color: 'white',
+            padding: '4px 8px',
+            borderRadius: '4px',
+            fontSize: '12px',
+            fontWeight: 'bold',
+            border: `1px solid ${labelBorder}`,
+            pointerEvents: 'none',
+            userSelect: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            backdropFilter: 'blur(4px)',
+            transition: 'all 0.3s ease'
+          }}>
+            <AlertTriangle size={12} />
+            {data.Nombre} {isDeflected && '✓'}
           </div>
         </Html>
       </mesh>
@@ -398,91 +583,261 @@ function AsteroidOrbit({ data, speedMultiplier }) {
   );
 }
 
+// --- COMPONENTE PRINCIPAL MODIFICADO ---
 export default function App() {
   const data = dataDelPython;
   const [speed, setSpeed] = useState(1);
+  const [isDeflected, setIsDeflected] = useState(false);
+  const [missileLaunched, setMissileLaunched] = useState(false);
+  const [asteroidPosition, setAsteroidPosition] = useState([50, 0, 0]);
+  const [missionStatus, setMissionStatus] = useState('ready'); // ready, armed, launched, success
+  const [asteroidDistance, setAsteroidDistance] = useState(100);
+  const [earthPosition, setEarthPosition] = useState([5, 0, 0]);
+  const [autoLaunchArmed, setAutoLaunchArmed] = useState(false);
+  const asteroidRef = useRef();
+
+  // Calcular distancia entre asteroide y Tierra
+  const calculateDistanceToEarth = (asteroidPos) => {
+    const earthPos = new THREE.Vector3(...earthPosition);
+    const asteroidVec = new THREE.Vector3(...asteroidPos);
+    return earthPos.distanceTo(asteroidVec);
+  };
+
+  const currentDistance = useMemo(() => {
+    return calculateDistanceToEarth(asteroidPosition);
+  }, [asteroidPosition, earthPosition]);
+
+  const isAsteroidClose = currentDistance < 25; // Umbral de distancia para lanzamiento automático
+
+  // Efecto para lanzamiento automático cuando está armado y el asteroide está cerca
+  useEffect(() => {
+    if (autoLaunchArmed && isAsteroidClose && missionStatus === 'armed' && !missileLaunched) {
+      console.log("¡Lanzamiento automático activado!");
+      setMissileLaunched(true);
+      setMissionStatus('launched');
+      
+      // Auto-reset si no hay impacto
+      setTimeout(() => {
+        if (missionStatus === 'launched') {
+          setMissileLaunched(false);
+          setMissionStatus('ready');
+          setAutoLaunchArmed(false);
+        }
+      }, 5000);
+    }
+  }, [autoLaunchArmed, isAsteroidClose, missionStatus, missileLaunched]);
+
+  const handleArmMissile = () => {
+    if (missionStatus === 'ready') {
+      setMissionStatus('armed');
+      setAutoLaunchArmed(true);
+      
+      // Mensaje informativo
+      console.log("Sistema armado. El misil se lanzará automáticamente cuando el asteroide esté cerca.");
+    } else if (missionStatus === 'success') {
+      // Resetear la misión
+      setIsDeflected(false);
+      setMissileLaunched(false);
+      setMissionStatus('ready');
+      setAutoLaunchArmed(false);
+    }
+  };
+
+  const handleMissileImpact = () => {
+    console.log("¡Impacto detectado!");
+    setMissileLaunched(false);
+    setIsDeflected(true);
+    setMissionStatus('success');
+    setAutoLaunchArmed(false);
+  };
+
+  const handleAsteroidUpdate = (position) => {
+    setAsteroidPosition(position);
+  };
+
+  const handleAsteroidDistanceUpdate = (distance) => {
+    setAsteroidDistance(distance);
+  };
+
+  const handleEarthPositionUpdate = (position) => {
+    setEarthPosition(position);
+  };
+
+  const getButtonText = () => {
+    switch (missionStatus) {
+      case 'ready':
+        return 'ARMAR SISTEMA DE AUTO-LANZAMIENTO';
+      case 'armed':
+        return 'SISTEMA ARMADO - ESPERANDO OBJETIVO';
+      case 'launched':
+        return 'MISIL EN CAMINO...';
+      case 'success':
+        return 'REINICIAR SIMULACIÓN';
+      default:
+        return 'ARMAR SISTEMA';
+    }
+  };
+
+  const getStatusMessage = () => {
+    switch (missionStatus) {
+      case 'armed':
+        if (isAsteroidClose) {
+          return <div className="auto-launch-info"> OBJETIVO EN RANGO - LANZANDO MISIL...</div>;
+        } else {
+          return <div className="waiting-for-target"> ESPERANDO QUE EL ASTEROIDE SE ACERQUE...</div>;
+        }
+      case 'launched':
+        return <div className="auto-launch-info"> MISIL EN CAMINO HACIA EL OBJETIVO</div>;
+      case 'success':
+        return <div className="success-message">✓ MISIÓN EXITOSA - ASTEROIDE DESVIADO</div>;
+      default:
+        return null;
+    }
+  };
 
   return (
     <>
       <style>{styles}</style>
       <div className="app-container">
+        {/* SIDEBAR */}
         <div className="sidebar">
           <div className="header">
-            <div className="flex items-center gap-2 mb-2">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              <Shield style={{ color: '#ff4757' }} size={24} />
               <h1>Alerta de Impacto</h1>
             </div>
             <h2>Parámetros Orbitales</h2>
           </div>
 
           <div className="datos-content">
+            {/* DATOS DEL ASTEROIDE */}
             <div className="data-row">
-              <span className="text-gray-400"><strong>Objeto:</strong></span>
-              <span className="text-white font-bold">{data.Nombre}</span>
+              <span style={{ color: '#a4b0be' }}>Objeto:</span>
+              <span style={{ color: 'white', fontWeight: 'bold' }}>{data.Nombre}</span>
             </div>
             <div className="data-row">
-              <span className="text-gray-400"><strong>Diámetro:</strong></span>
-              <span className="text-yellow-400 font-bold">{data.Diametro} km</span>
+              <span style={{ color: '#a4b0be' }}>Diámetro:</span>
+              <span style={{ color: '#ffa502', fontWeight: 'bold' }}>{data.Diametro} km</span>
             </div>
             <div className="data-row">
-              <span className="text-gray-400"><strong>MOID:</strong></span>
-              <span className="text-red-400 font-bold">{data.MOID} AU</span>
+              <span style={{ color: '#a4b0be' }}>MOID:</span>
+              <span style={{ color: '#ff4757', fontWeight: 'bold' }}>{data.MOID} AU</span>
             </div>
+            
+            {/* PANEL DE CONTROL DE MISIÓN MEJORADO */}
+            <div className="mission-control">
+              <div className="mission-title">
+                <Target size={20} />
+                Sistema de Auto-Lanzamiento
+              </div>
+              
+              <div style={{ marginBottom: '10px', fontSize: '0.8rem', textAlign: 'center' }}>
+                <div style={{ color: '#a4b0be', marginBottom: '4px' }}>
+                  Distancia a la Tierra: <strong>{currentDistance.toFixed(1)}</strong> unidades
+                </div>
+                <div style={{ color: '#a4b0be' }}>
+                  Rango de lanzamiento: <strong>25</strong> unidades
+                </div>
+              </div>
+              
+              {getStatusMessage()}
+              
+              <button 
+                className="mission-button"
+                onClick={handleArmMissile}
+                disabled={missionStatus === 'launched' || missionStatus === 'armed'}
+                style={{
+                  opacity: (missionStatus === 'launched' || missionStatus === 'armed') ? 0.7 : 1,
+                }}
+              >
+                <Rocket size={16} />
+                {getButtonText()}
+              </button>
+
+              <div className="trajectory-info">
+                <div><strong>Estado:</strong> {isDeflected ? 'DESVIADO' : missionStatus === 'armed' ? 'ARMADO' : 'LISTO'}</div>
+                <div><strong>Distancia:</strong> {currentDistance.toFixed(1)} unidades</div>
+                <div><strong>Misil:</strong> {missileLaunched ? 'ACTIVO' : 'INACTIVO'}</div>
+                <div><strong>Auto-lanzamiento:</strong> {autoLaunchArmed ? 'ACTIVADO' : 'DESACTIVADO'}</div>
+              </div>
+            </div>
+
+            {/* CONTROL DE VELOCIDAD */}
+            <div className="control-panel">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: '#a4b0be', marginBottom: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  <Clock size={14}/> Velocidad de Tiempo
+                </div>
+                <span style={{ color: '#ffa502', fontFamily: 'monospace' }}>x{speed.toFixed(1)}</span>
+              </div>
+              <div className="slider-container">
+                <span style={{ fontSize: '12px', color: '#666' }}>0</span>
+                <input 
+                  type="range" 
+                  min="0" 
+                  max="5" 
+                  step="0.1" 
+                  value={speed}
+                  onChange={(e) => setSpeed(parseFloat(e.target.value))}
+                  className="slider"
+                />
+                <FastForward size={14} style={{ color: '#666' }}/>
+              </div>
+            </div>
+
+            {/* DATOS ORBITALES RESTANTES */}
             <div className="data-row">
-              <span className="text-gray-400"><strong>Semieje (a):</strong></span>
+              <span style={{ color: '#a4b0be' }}>Semieje (a):</span>
               <span>{data.Semieje_a} AU</span>
             </div>
             <div className="data-row">
-              <span className="text-gray-400"><strong>Excentricidad:</strong></span>
+              <span style={{ color: '#a4b0be' }}>Excentricidad:</span>
               <span>{data.Excentricidad_e}</span>
             </div>
             <div className="data-row">
-              <span className="text-gray-400"><strong>Inclinación:</strong></span>
+              <span style={{ color: '#a4b0be' }}>Inclinación:</span>
               <span>{data.Inclinacion_i}°</span>
-            </div>
-            <div className="data-row">
-              <span className="text-gray-400"><strong>Nodo Asc.:</strong></span>
-              <span>{data.Nodo_Asc_om}°</span>
-            </div>
-            <div className="data-row">
-              <span className="text-gray-400"><strong>Arg. Perihelio:</strong></span>
-              <span>{data.Arg_Perihelio_w}°</span>
-            </div>
-            <div className="control-panel">
-               <div className="flex items-center justify-between text-xs text-gray-300 mb-2">
-                 <div className="flex items-center gap-1">
-                   <Clock size={14}/><strong>Velocidad de Tiempo</strong>
-                 </div>
-                 <span className="text-yellow-400 font-mono">x{speed.toFixed(1)}</span>
-               </div>
-               <div className="slider-container">
-                 <span className="text-xs text-gray-500">0</span>
-                 <input 
-                    type="range" 
-                    min="0" 
-                    max="5" 
-                    step="0.1" 
-                    value={speed}
-                    onChange={(e) => setSpeed(parseFloat(e.target.value))}
-                    className="slider"
-                 />
-                 <FastForward size={14} className="text-gray-500"/>
-               </div>
             </div>
           </div>
         </div>
 
+        {/* SIMULACIÓN 3D */}
         <div className="simulation-container">
-          <Canvas camera={{ position: [0, 60, 120], fov: 45 }} dpr={[1, 2]}>
+          <Canvas camera={{ position: [0, 60, 120], fov: 45 }}>
             <color attach="background" args={['#000005']} />
 
             <ambientLight intensity={0.05} />
             <StarField />
 
             <RealisticSun />
-            <RealisticEarth speedMultiplier={speed} />
-            <AsteroidOrbit data={data} speedMultiplier={speed} />
+            <RealisticEarth 
+              speedMultiplier={speed} 
+              onPositionUpdate={handleEarthPositionUpdate}
+            />
+            <AsteroidOrbit 
+              data={data} 
+              speedMultiplier={speed}
+              isDeflected={isDeflected}
+              onAsteroidUpdate={handleAsteroidUpdate}
+              onDistanceUpdate={handleAsteroidDistanceUpdate}
+              asteroidRef={asteroidRef}
+            />
 
-            <OrbitControls minDistance={5} maxDistance={500} />
+            {/* Misil */}
+            <Missile 
+              targetPosition={asteroidPosition}
+              onImpact={handleMissileImpact}
+              isLaunched={missileLaunched}
+              asteroidRef={asteroidRef}
+            />
+
+            <OrbitControls 
+              minDistance={5} 
+              maxDistance={500} 
+              enablePan={true}
+              enableZoom={true}
+              enableRotate={true}
+            />
             <gridHelper args={[200, 50, 0x222222, 0x111111]} position={[0, -2, 0]} />
           </Canvas>
         </div>
