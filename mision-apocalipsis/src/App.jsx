@@ -311,6 +311,54 @@ const styles = `
     50% { opacity: 1; }
     100% { opacity: 0.6; }
   }
+  
+  /* BOTONES DE CAMBIO DE VISTA */
+.view-toggle {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  gap: 10px;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 8px;
+  border-radius: 10px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.view-button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.view-button-3d {
+  background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%);
+  color: white;
+}
+
+.view-button-2d {
+  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+  color: white;
+}
+
+.view-button-active {
+  transform: scale(1.05);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+}
+
+.view-button:not(.view-button-active):hover {
+  transform: translateY(-2px);
+  opacity: 0.9;
+}
 `;
 
 // --- SHADERS AVANZADOS ---
@@ -737,7 +785,7 @@ function AsteroidOrbit({ data, speedMultiplier, isDeflected, onAsteroidUpdate, a
 }
 
 // --- COMPONENTE DE SIMULACIÓN (Empaqueta todo lo anterior) ---
-function Simulation({ onBack }) {
+function Simulation({ onBack, currentView, onViewChange }) {
   const data = dataDelPython;
   const [speed, setSpeed] = useState(1);
   const [isDeflected, setIsDeflected] = useState(false);
@@ -821,6 +869,23 @@ function Simulation({ onBack }) {
 
   return (
     <div className="app-container">
+  
+      {/* BOTONES DE CAMBIO DE VISTA */}
+      <div className="view-toggle">
+        <button 
+          className={`view-button view-button-3d ${currentView === '3D' ? 'view-button-active' : ''}`}
+          onClick={() => onViewChange('3D')}
+        >
+          🌌 3D
+        </button>
+        <button 
+          className={`view-button view-button-2d ${currentView === '2D' ? 'view-button-active' : ''}`}
+          onClick={() => onViewChange('2D')}
+        >
+          📊 2D
+        </button>
+      </div>
+
       {/* SIDEBAR */}
       <div className="sidebar">
         <button className="back-button" onClick={onBack}>
@@ -942,6 +1007,7 @@ function LandingPage({ onStart }) {
         loop 
         playsInline
         src='./videobackground.mp4' 
+        muted
       />
       <div className="video-overlay"></div>
       
@@ -951,27 +1017,442 @@ function LandingPage({ onStart }) {
           <strong>Cosmo Coders</strong><br/>
           Equipo 5
         </p>
+        
+        {/* BOTÓN ÚNICO DE INICIAR */}
         <button className="btn-simulacion" onClick={onStart}>
           <Play size={24} fill="white" />
           Iniciar Simulación
         </button>
+
+        {/* DESCRIPCIÓN SIMPLIFICADA */}
+        <div style={{
+          marginTop: '2rem',
+          maxWidth: '600px',
+          background: 'rgba(255, 255, 255, 0.1)',
+          padding: '20px',
+          borderRadius: '15px',
+          backdropFilter: 'blur(10px)',
+          border: '1px solid rgba(255, 255, 255, 0.2)'
+        }}>
+          <p style={{ margin: 0, fontSize: '1rem', lineHeight: '1.6', color: '#dfe4ea' }}>
+            <strong>Sistema de Defensa Planetaria</strong><br/>
+            Simula el desvío de asteroides potencialmente peligrosos usando tecnología de impacto cinético. 
+            Podrás cambiar entre vista 3D inmersiva y 2D analítica desde el simulador.
+          </p>
+        </div>
       </div>
     </div>
   )
 }
 
+// --- COMPONENTE DE SIMULACIÓN 2D ---
+function Simulation2D({ onBack, currentView, onViewChange }) {
+  const [speed, setSpeed] = useState(1);
+  const [isDeflected, setIsDeflected] = useState(false);
+  const [missileLaunched, setMissileLaunched] = useState(false);
+  const [missionStatus, setMissionStatus] = useState('ready');
+  const [autoLaunchArmed, setAutoLaunchArmed] = useState(false);
+  
+  const canvasRef = useRef();
+  const animationRef = useRef();
+  const earthPosRef = useRef({ x: 400, y: 300 });
+  const asteroidPosRef = useRef({ x: 100, y: 100 });
+  const missilePosRef = useRef({ x: 400, y: 300 });
+  const progressRef = useRef(0);
+
+  const data = {
+    "Nombre": "109P/Swift-Tuttle",
+    "Diametro": 26.0,
+    "MOID": 0.000892,
+    "Semieje_a": 26.09,
+  };
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    
+    const draw = () => {
+      // Limpiar canvas
+      ctx.fillStyle = '#000005';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Dibujar estrellas de fondo
+      drawStars(ctx);
+      
+      // Dibujar órbitas
+      drawOrbits(ctx);
+      
+      // Dibujar Tierra
+      drawEarth(ctx, earthPosRef.current.x, earthPosRef.current.y);
+      
+      // Dibujar asteroide
+      drawAsteroid(ctx, asteroidPosRef.current.x, asteroidPosRef.current.y, isDeflected);
+      
+      // Dibujar misil si está lanzado
+      if (missileLaunched) {
+        drawMissile(ctx, missilePosRef.current.x, missilePosRef.current.y);
+      }
+      
+      // Dibujar información
+      drawInfo(ctx);
+    };
+    
+    const updatePositions = () => {
+      // Actualizar posición de la Tierra (órbita circular)
+      const time = Date.now() * 0.001 * speed;
+      earthPosRef.current.x = 400 + Math.cos(time * 0.5) * 150;
+      earthPosRef.current.y = 300 + Math.sin(time * 0.5) * 150;
+      
+      // Actualizar posición del asteroide (órbita elíptica)
+      progressRef.current += 0.002 * speed;
+      const asteroidAngle = progressRef.current * Math.PI * 2;
+      const asteroidX = 400 + Math.cos(asteroidAngle) * 250;
+      const asteroidY = 300 + Math.sin(asteroidAngle) * 150;
+      
+      // Aplicar desviación si está activa
+      if (isDeflected) {
+        asteroidPosRef.current.x = asteroidX + 50;
+        asteroidPosRef.current.y = asteroidY - 30;
+      } else {
+        asteroidPosRef.current.x = asteroidX;
+        asteroidPosRef.current.y = asteroidY;
+      }
+      
+      // Actualizar misil
+      if (missileLaunched) {
+        const targetX = asteroidPosRef.current.x;
+        const targetY = asteroidPosRef.current.y;
+        const dx = targetX - missilePosRef.current.x;
+        const dy = targetY - missilePosRef.current.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance < 15) {
+          // Impacto detectado
+          handleMissileImpact();
+        } else {
+          // Mover misil hacia el asteroide
+          missilePosRef.current.x += (dx / distance) * 8 * speed;
+          missilePosRef.current.y += (dy / distance) * 8 * speed;
+        }
+      }
+      
+      // Verificar auto-lanzamiento
+      const distanceToEarth = Math.sqrt(
+        Math.pow(asteroidPosRef.current.x - earthPosRef.current.x, 2) +
+        Math.pow(asteroidPosRef.current.y - earthPosRef.current.y, 2)
+      );
+      
+      if (autoLaunchArmed && distanceToEarth < 100 && missionStatus === 'armed' && !missileLaunched) {
+        setMissileLaunched(true);
+        setMissionStatus('launched');
+        missilePosRef.current = { ...earthPosRef.current };
+      }
+    };
+    
+    const gameLoop = () => {
+      updatePositions();
+      draw();
+      animationRef.current = requestAnimationFrame(gameLoop);
+    };
+    
+    gameLoop();
+    
+    return () => {
+      cancelAnimationFrame(animationRef.current);
+    };
+  }, [speed, isDeflected, missileLaunched, missionStatus, autoLaunchArmed]);
+
+  const drawStars = (ctx) => {
+    ctx.fillStyle = '#ffffff';
+    for (let i = 0; i < 100; i++) {
+      const x = (i * 13) % 800;
+      const y = (i * 7) % 600;
+      const size = Math.random() * 1.5;
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+
+  const drawOrbits = (ctx) => {
+    // Órbita de la Tierra
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(400, 300, 150, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Órbita del asteroide
+    ctx.strokeStyle = isDeflected ? 'rgba(46, 213, 115, 0.6)' : 'rgba(255, 71, 87, 0.6)';
+    ctx.setLineDash(isDeflected ? [5, 5] : []);
+    ctx.beginPath();
+    ctx.ellipse(400, 300, 250, 150, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  };
+
+  const drawEarth = (ctx, x, y) => {
+    // Tierra
+    ctx.fillStyle = '#1e4e8c';
+    ctx.beginPath();
+    ctx.arc(x, y, 20, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Atmosfera
+    ctx.strokeStyle = 'rgba(64, 144, 226, 0.5)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(x, y, 25, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // Etiqueta
+    ctx.fillStyle = 'rgba(30, 78, 140, 0.9)';
+    ctx.fillRect(x - 25, y - 40, 50, 20);
+    ctx.fillStyle = 'white';
+    ctx.font = '12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('TIERRA', x, y - 28);
+  };
+
+  const drawAsteroid = (ctx, x, y, deflected) => {
+    // Asteroide
+    ctx.fillStyle = deflected ? '#2ed573' : '#888888';
+    ctx.beginPath();
+    ctx.arc(x, y, 15, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Detalles del asteroide
+    ctx.fillStyle = deflected ? '#1dd1a1' : '#666666';
+    ctx.beginPath();
+    ctx.arc(x - 5, y - 3, 4, 0, Math.PI * 2);
+    ctx.arc(x + 6, y + 4, 3, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Etiqueta
+    ctx.fillStyle = deflected ? 'rgba(46, 213, 115, 0.9)' : 'rgba(255, 71, 87, 0.9)';
+    ctx.fillRect(x - 40, y - 40, 80, 20);
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${data.Nombre} ${deflected ? '✓' : ''}`, x, y - 28);
+  };
+
+  const drawMissile = (ctx, x, y) => {
+    ctx.fillStyle = '#ff4757';
+    ctx.beginPath();
+    ctx.moveTo(x, y - 8);
+    ctx.lineTo(x - 4, y + 8);
+    ctx.lineTo(x + 4, y + 8);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Llama del misil
+    ctx.fillStyle = '#ffa502';
+    ctx.beginPath();
+    ctx.moveTo(x, y + 8);
+    ctx.lineTo(x - 3, y + 15);
+    ctx.lineTo(x + 3, y + 15);
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  const drawInfo = (ctx) => {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(`Velocidad: x${speed.toFixed(1)}`, 20, 30);
+    ctx.fillText(`Estado: ${isDeflected ? 'DESVIADO' : 'AMENAZA'}`, 20, 50);
+    ctx.fillText(`Misil: ${missileLaunched ? 'ACTIVO' : 'INACTIVO'}`, 20, 70);
+  };
+
+  const handleArmMissile = () => {
+    if (missionStatus === 'ready') {
+      setMissionStatus('armed');
+      setAutoLaunchArmed(true);
+    } else if (missionStatus === 'success') {
+      resetMission();
+    }
+  };
+
+  const handleMissileImpact = () => {
+    setMissileLaunched(false);
+    setIsDeflected(true);
+    setMissionStatus('success');
+    setAutoLaunchArmed(false);
+  };
+
+  const resetMission = () => {
+    setIsDeflected(false);
+    setMissileLaunched(false);
+    setMissionStatus('ready');
+    setAutoLaunchArmed(false);
+    progressRef.current = 0;
+  };
+
+  const getButtonText = () => {
+    switch (missionStatus) {
+      case 'ready': return 'ARMAR SISTEMA DE AUTO-LANZAMIENTO';
+      case 'armed': return 'SISTEMA ARMADO - ESPERANDO OBJETIVO';
+      case 'launched': return 'MISIL EN CAMINO...';
+      case 'success': return 'REINICIAR SIMULACIÓN';
+      default: return 'ARMAR SISTEMA';
+    }
+  };
+
+  const getStatusMessage = () => {
+    switch (missionStatus) {
+      case 'armed':
+        const distanceToEarth = Math.sqrt(
+          Math.pow(asteroidPosRef.current.x - earthPosRef.current.x, 2) +
+          Math.pow(asteroidPosRef.current.y - earthPosRef.current.y, 2)
+        );
+        return distanceToEarth < 100 ? 
+          <div className="auto-launch-info">OBJETIVO EN RANGO - LANZANDO MISIL...</div> : 
+          <div className="waiting-for-target">ESPERANDO QUE EL ASTEROIDE SE ACERQUE...</div>;
+      case 'launched':
+        return <div className="auto-launch-info">MISIL EN CAMINO HACIA EL OBJETIVO</div>;
+      case 'success':
+        return <div className="success-message">✓ MISIÓN EXITOSA - ASTEROIDE DESVIADO</div>;
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="app-container">
+      {/* BOTONES DE CAMBIO DE VISTA */}
+      <div className="view-toggle">
+        <button 
+          className={`view-button view-button-3d ${currentView === '3D' ? 'view-button-active' : ''}`}
+          onClick={() => onViewChange('3D')}
+        >
+          🌌 3D
+        </button>
+        <button 
+          className={`view-button view-button-2d ${currentView === '2D' ? 'view-button-active' : ''}`}
+          onClick={() => onViewChange('2D')}
+        >
+          📊 2D
+        </button>
+      </div>
+
+      {/* SIDEBAR */}
+      <div className="sidebar">
+        <div className="header" style={{marginTop: '30px'}}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <Shield style={{ color: '#ff4757' }} size={24} />
+            <h1>Alerta de Impacto</h1>
+          </div>
+          <h2>Vista 2D - Simulación Orbital</h2>
+        </div>
+
+        <div className="datos-content">
+          <div className="data-row">
+            <span style={{ color: '#a4b0be' }}>Objeto:</span>
+            <span style={{ color: 'white', fontWeight: 'bold' }}>{data.Nombre}</span>
+          </div>
+          <div className="data-row">
+            <span style={{ color: '#a4b0be' }}>Diámetro:</span>
+            <span style={{ color: '#ffa502', fontWeight: 'bold' }}>{data.Diametro} km</span>
+          </div>
+          <div className="data-row">
+            <span style={{ color: '#a4b0be' }}>MOID:</span>
+            <span style={{ color: '#ff4757', fontWeight: 'bold' }}>{data.MOID} AU</span>
+          </div>
+          
+          <div className="mission-control">
+            <div className="mission-title">
+              <Target size={20} />
+              Sistema de Defensa
+            </div>
+            
+            {getStatusMessage()}
+            
+            <button 
+              className="mission-button"
+              onClick={handleArmMissile}
+              disabled={missionStatus === 'launched' || missionStatus === 'armed'}
+              style={{ opacity: (missionStatus === 'launched' || missionStatus === 'armed') ? 0.7 : 1 }}
+            >
+              <Rocket size={16} />
+              {getButtonText()}
+            </button>
+
+            <div className="trajectory-info">
+              <div><strong>Estado:</strong> {isDeflected ? '🟢 DESVIADO' : missionStatus === 'armed' ? '🟡 ARMADO' : '🔴 LISTO'}</div>
+              <div><strong>Auto-lanzamiento:</strong> {autoLaunchArmed ? '🟢 ACTIVADO' : '🔴 DESACTIVADO'}</div>
+            </div>
+          </div>
+
+          <div className="control-panel">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: '#a4b0be', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Clock size={14}/> Velocidad de Tiempo
+              </div>
+              <span style={{ color: '#ffa502', fontFamily: 'monospace' }}>x{speed.toFixed(1)}</span>
+            </div>
+            <div className="slider-container">
+              <span style={{ fontSize: '12px', color: '#666' }}>0</span>
+              <input 
+                type="range" min="0" max="5" step="0.1" value={speed}
+                onChange={(e) => setSpeed(parseFloat(e.target.value))}
+                className="slider"
+              />
+              <FastForward size={14} style={{ color: '#666' }}/>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* CANVAS 2D */}
+      <div className="simulation-container">
+        <canvas 
+          ref={canvasRef}
+          width={800}
+          height={600}
+          style={{
+            border: '2px solid #333',
+            borderRadius: '8px',
+            background: '#000005'
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 // --- COMPONENTE PRINCIPAL QUE GESTIONA LAS VISTAS ---
 export default function App() {
-  const [started, setStarted] = useState(false);
+  const [currentView, setCurrentView] = useState('landing');
+  const [simulationView, setSimulationView] = useState('3D');
+
+  // Efecto para cambiar entre vistas 2D y 3D automáticamente
+  useEffect(() => {
+    if (currentView.startsWith('simulation')) {
+      if (simulationView === '3D' && currentView !== 'simulation3D') {
+        setCurrentView('simulation3D');
+      } else if (simulationView === '2D' && currentView !== 'simulation2D') {
+        setCurrentView('simulation2D');
+      }
+    }
+  }, [simulationView, currentView]);
+
+  const renderView = () => {
+    switch (currentView) {
+      case 'simulation3D':
+        return <Simulation onBack={() => setCurrentView('landing')} currentView={simulationView} onViewChange={setSimulationView} />;
+      case 'simulation2D':
+        return <Simulation2D onBack={() => setCurrentView('landing')} currentView={simulationView} onViewChange={setSimulationView} />;
+      case 'landing':
+      default:
+        return <LandingPage onStart={() => { setCurrentView('simulation3D'); setSimulationView('3D'); }} />;
+    }
+  };
 
   return (
     <>
       <style>{styles}</style>
-      {started ? (
-        <Simulation onBack={() => setStarted(false)} />
-      ) : (
-        <LandingPage onStart={() => setStarted(true)} />
-      )}
+      {renderView()}
     </>
   );
 }
