@@ -1,11 +1,10 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Html, Line } from '@react-three/drei';
-import { AlertTriangle, Info, Shield, Clock, FastForward, Target, Rocket } from 'lucide-react';
+import { AlertTriangle, Info, Shield, Clock, FastForward, Target, Rocket, Play, ChevronLeft } from 'lucide-react';
 import * as THREE from 'three';
 
-// ... (los estilos se mantienen igual)
-
+// --- ESTILOS CSS ---
 const styles = `
   html, body, #root {
     margin: 0;
@@ -17,11 +16,122 @@ const styles = `
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   }
 
+  /* PANTALLA DE BIENVENIDA */
+  .landing-container {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: #000; /* Fondo de respaldo */
+    color: white;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Estilos para el video de fondo */
+  .video-bg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 0;
+  }
+
+  /* Capa oscura sobre el video para mejorar legibilidad */
+  .video-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5); /* Oscurece el video un 50% */
+    z-index: 1;
+  }
+
+  .landing-content {
+    position: relative;
+    z-index: 2; /* Asegura que el contenido esté sobre el video */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .app-title {
+    font-size: 4rem;
+    margin-bottom: 1rem;
+    background: #a55eea;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 900;
+    letter-spacing: -2px;
+    text-transform: uppercase;
+    text-shadow: 0 4px 10px rgba(0,0,0,0.5);
+  }
+
+  .app-description {
+    font-size: 1.2rem;
+    color: #e0e0e0;
+    max-width: 600px;
+    margin-bottom: 3rem;
+    line-height: 1.6;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+  }
+
+  .btn-simulacion {
+    padding: 15px 40px;
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: white;
+    background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%);
+    border: none;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 10px 20px rgba(142, 68, 173, 0.4);
+  }
+
+  .btn-simulacion:hover {
+    transform: translateY(-3px) scale(1.05);
+    background: linear-gradient(135deg, #9b59b6 0%, #be2edd 100%);
+    box-shadow: 0 15px 30px rgba(142, 68, 173, 0.6);
+  }
+
+  /* ESTILOS DEL SIMULADOR */
   .app-container {
     display: flex;
     flex-direction: row;
     width: 100vw;
     height: 100vh;
+  }
+
+  .back-button {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 100;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.8rem;
+    transition: background 0.3s;
+  }
+
+  .back-button:hover {
+    background: rgba(255, 255, 255, 0.2);
   }
 
   .sidebar {
@@ -34,6 +144,7 @@ const styles = `
     border-right: 1px solid #333;
     z-index: 10;
     overflow-y: auto;
+    position: relative;
   }
 
   .header {
@@ -202,6 +313,71 @@ const styles = `
   }
 `;
 
+// --- SHADERS AVANZADOS ---
+const AtmosphereMaterial = {
+  uniforms: {
+    c: { type: "f", value: 1.0 },
+    p: { type: "f", value: 3.0 },
+    glowColor: { type: "c", value: new THREE.Color(0x3399ff) },
+    viewVector: { type: "v3", value: new THREE.Vector3() }
+  },
+  vertexShader: `
+    uniform vec3 viewVector;
+    varying float intensity;
+    void main() {
+      vec3 vNormal = normalize(normalMatrix * normal);
+      intensity = pow(0.6 - dot(vNormal, vec3(0, 0, 1.0)), 4.0);
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 glowColor;
+    varying float intensity;
+    void main() {
+      vec3 glow = glowColor * intensity;
+      gl_FragColor = vec4(glow, 1.0);
+    }
+  `,
+  side: THREE.BackSide,
+  blending: THREE.AdditiveBlending,
+  transparent: true
+};
+
+const SunMaterial = {
+  uniforms: {
+    time: { value: 0 },
+    color1: { value: new THREE.Color('#ffaa00') },
+    color2: { value: new THREE.Color('#ff4500') }
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    varying vec3 vPosition;
+    void main() {
+      vUv = uv;
+      vPosition = position;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform float time;
+    uniform vec3 color1;
+    uniform vec3 color2;
+    varying vec2 vUv;
+    varying vec3 vPosition;
+
+    float noise(vec3 p) {
+      return sin(p.x * 10.0 + time) * sin(p.y * 10.0 + time) * sin(p.z * 10.0 + time);
+    }
+
+    void main() {
+      float n = noise(vPosition + time * 0.2);
+      vec3 finalColor = mix(color1, color2, n * 0.5 + 0.5);
+      float brightness = 1.2;
+      gl_FragColor = vec4(finalColor * brightness, 1.0);
+    }
+  `
+};
+
 // --- DATOS DEL ASTEROIDE ---
 const dataDelPython = {
   "Nombre": "109P/Swift-Tuttle",
@@ -245,7 +421,7 @@ const getOrbitPoints = (a, e, i_deg, om_deg, w_deg, steps = 300) => {
   return points;
 };
 
-// --- COMPONENTES 3D ---
+// --- COMPONENTES 3D (Simulador) ---
 
 function StarField({ count = 3000 }) {
   const points = useMemo(() => {
@@ -273,14 +449,29 @@ function StarField({ count = 3000 }) {
 
 function RealisticSun() {
   const mesh = useRef();
+  const materialRef = useRef();
+
+  useFrame(({ clock }) => {
+    if (materialRef.current) {
+      materialRef.current.uniforms.time.value = clock.getElapsedTime();
+    }
+  });
 
   return (
     <group>
       <mesh ref={mesh} position={[0, 0, 0]}>
         <sphereGeometry args={[1.5, 64, 64]} />
-        <meshBasicMaterial color="#ffaa00" />
+        <shaderMaterial
+          ref={materialRef}
+          attach="material"
+          args={[SunMaterial]}
+        />
       </mesh>
       <pointLight distance={300} intensity={2.5} color="#fff0d0" decay={1} />
+      <mesh scale={[1.2, 1.2, 1.2]}>
+        <sphereGeometry args={[1.5, 32, 32]} />
+        <meshBasicMaterial color="#ffaa00" transparent opacity={0.15} side={THREE.BackSide} />
+      </mesh>
     </group>
   );
 }
@@ -342,6 +533,16 @@ function RealisticEarth({ speedMultiplier, onPositionUpdate }) {
             shininess={20}
           />
         </mesh>
+        <mesh scale={[1.2, 1.2, 1.2]}>
+           <sphereGeometry args={[0.3, 64, 64]} />
+           <shaderMaterial
+              attach="material"
+              args={[AtmosphereMaterial]}
+              side={THREE.BackSide}
+              blending={THREE.AdditiveBlending}
+              transparent
+           />
+        </mesh>
         <Html distanceFactor={20} position={[0, 0.5, 0]}>
           <div style={{
             backgroundColor: 'rgba(30, 78, 140, 0.8)',
@@ -362,7 +563,6 @@ function RealisticEarth({ speedMultiplier, onPositionUpdate }) {
   );
 }
 
-// COMPONENTE DEL MISIL (MISMO QUE ANTES)
 function Missile({ targetPosition, onImpact, isLaunched, asteroidRef }) {
   const missileRef = useRef();
   const startPosition = useMemo(() => [0, 0, 0], []);
@@ -406,22 +606,13 @@ function Missile({ targetPosition, onImpact, isLaunched, asteroidRef }) {
       if (distance < 4) {
         impactDetected.current = true;
         onImpact();
-        
-        setTimeout(() => {
-          if (missileRef.current) {
-            missileRef.current.visible = false;
-          }
-        }, 100);
+        setTimeout(() => { if (missileRef.current) missileRef.current.visible = false; }, 100);
       }
     }
     
     if (currentPos.length() > 300) {
       impactDetected.current = true;
-      setTimeout(() => {
-        if (missileRef.current) {
-          missileRef.current.visible = false;
-        }
-      }, 100);
+      setTimeout(() => { if (missileRef.current) missileRef.current.visible = false; }, 100);
     }
   });
 
@@ -444,21 +635,11 @@ function Missile({ targetPosition, onImpact, isLaunched, asteroidRef }) {
             <cylinderGeometry args={[0.05, 0.1, 0.8, 8]} />
             <meshStandardMaterial color="#ff4757" emissive="#ff0000" />
           </mesh>
-          <pointLight 
-            color="#ff6b81" 
-            intensity={3} 
-            distance={15} 
-            decay={2} 
-          />
-          
+          <pointLight color="#ff6b81" intensity={3} distance={15} decay={2} />
           {trailPoints.current.map((point, index) => (
             <mesh key={index} position={point.position}>
               <sphereGeometry args={[0.02 + point.life * 0.05, 4]} />
-              <meshBasicMaterial 
-                color="#ffd700" 
-                transparent 
-                opacity={point.life * 0.8}
-              />
+              <meshBasicMaterial color="#ffd700" transparent opacity={point.life * 0.8} />
             </mesh>
           ))}
         </group>
@@ -467,7 +648,6 @@ function Missile({ targetPosition, onImpact, isLaunched, asteroidRef }) {
   );
 }
 
-// COMPONENTE DEL ASTEROIDE (MISMO QUE ANTES)
 function AsteroidOrbit({ data, speedMultiplier, isDeflected, onAsteroidUpdate, asteroidRef, onDistanceUpdate }) {
   const points = useMemo(() =>
     getOrbitPoints(data.Semieje_a, data.Excentricidad_e, data.Inclinacion_i, data.Nodo_Asc_om, data.Arg_Perihelio_w),
@@ -503,17 +683,10 @@ function AsteroidOrbit({ data, speedMultiplier, isDeflected, onAsteroidUpdate, a
       actualRef.current.rotation.x += 0.01;
       actualRef.current.rotation.y += 0.02;
 
-      if (onAsteroidUpdate) {
-        onAsteroidUpdate(finalPos);
-      }
+      if (onAsteroidUpdate) onAsteroidUpdate(finalPos);
 
-      const distanceFromCenter = Math.sqrt(
-        finalPos[0] ** 2 + finalPos[1] ** 2 + finalPos[2] ** 2
-      );
-
-      if (onDistanceUpdate) {
-        onDistanceUpdate(distanceFromCenter);
-      }
+      const distanceFromCenter = Math.sqrt(finalPos[0] ** 2 + finalPos[1] ** 2 + finalPos[2] ** 2);
+      if (onDistanceUpdate) onDistanceUpdate(distanceFromCenter);
     }
   });
 
@@ -523,40 +696,20 @@ function AsteroidOrbit({ data, speedMultiplier, isDeflected, onAsteroidUpdate, a
 
   return (
     <>
-      <Line
-        points={points}
-        color="#ff4757"
-        lineWidth={1}
-        opacity={0.4}
-        transparent
-      />
-
+      <Line points={points} color="#ff4757" lineWidth={1} opacity={0.4} transparent />
       {isDeflected && (
         <Line
           points={points.map((point, index) => {
             const progress = index / points.length;
             const deflectionAmount = progress * deflectionProgress.current * 15;
-            return [
-              point[0] + deflectionAmount,
-              point[1] + deflectionAmount * 0.8,
-              point[2] + deflectionAmount * 0.5
-            ];
+            return [point[0] + deflectionAmount, point[1] + deflectionAmount * 0.8, point[2] + deflectionAmount * 0.5];
           })}
-          color="#2ed573"
-          lineWidth={2}
-          opacity={0.8}
-          transparent
+          color="#2ed573" lineWidth={2} opacity={0.8} transparent
         />
       )}
-
       <mesh ref={actualRef}>
         <dodecahedronGeometry args={[0.6, 0]} />
-        <meshStandardMaterial 
-          color={asteroidColor}
-          roughness={0.8} 
-          metalness={0.2} 
-          emissive={isDeflected ? new THREE.Color(0x2ed573).multiplyScalar(0.3) : new THREE.Color(0x000000)}
-        />
+        <meshStandardMaterial color={asteroidColor} roughness={0.8} metalness={0.2} emissive={isDeflected ? new THREE.Color(0x2ed573).multiplyScalar(0.3) : new THREE.Color(0x000000)} />
         <Html distanceFactor={30}>
           <div style={{
             backgroundColor: labelBg,
@@ -583,20 +736,19 @@ function AsteroidOrbit({ data, speedMultiplier, isDeflected, onAsteroidUpdate, a
   );
 }
 
-// --- COMPONENTE PRINCIPAL MODIFICADO ---
-export default function App() {
+// --- COMPONENTE DE SIMULACIÓN (Empaqueta todo lo anterior) ---
+function Simulation({ onBack }) {
   const data = dataDelPython;
   const [speed, setSpeed] = useState(1);
   const [isDeflected, setIsDeflected] = useState(false);
   const [missileLaunched, setMissileLaunched] = useState(false);
   const [asteroidPosition, setAsteroidPosition] = useState([50, 0, 0]);
-  const [missionStatus, setMissionStatus] = useState('ready'); // ready, armed, launched, success
+  const [missionStatus, setMissionStatus] = useState('ready');
   const [asteroidDistance, setAsteroidDistance] = useState(100);
   const [earthPosition, setEarthPosition] = useState([5, 0, 0]);
   const [autoLaunchArmed, setAutoLaunchArmed] = useState(false);
   const asteroidRef = useRef();
 
-  // Calcular distancia entre asteroide y Tierra
   const calculateDistanceToEarth = (asteroidPos) => {
     const earthPos = new THREE.Vector3(...earthPosition);
     const asteroidVec = new THREE.Vector3(...asteroidPos);
@@ -607,16 +759,12 @@ export default function App() {
     return calculateDistanceToEarth(asteroidPosition);
   }, [asteroidPosition, earthPosition]);
 
-  const isAsteroidClose = currentDistance < 25; // Umbral de distancia para lanzamiento automático
+  const isAsteroidClose = currentDistance < 25;
 
-  // Efecto para lanzamiento automático cuando está armado y el asteroide está cerca
   useEffect(() => {
     if (autoLaunchArmed && isAsteroidClose && missionStatus === 'armed' && !missileLaunched) {
-      console.log("¡Lanzamiento automático activado!");
       setMissileLaunched(true);
       setMissionStatus('launched');
-      
-      // Auto-reset si no hay impacto
       setTimeout(() => {
         if (missionStatus === 'launched') {
           setMissileLaunched(false);
@@ -631,11 +779,7 @@ export default function App() {
     if (missionStatus === 'ready') {
       setMissionStatus('armed');
       setAutoLaunchArmed(true);
-      
-      // Mensaje informativo
-      console.log("Sistema armado. El misil se lanzará automáticamente cuando el asteroide esté cerca.");
     } else if (missionStatus === 'success') {
-      // Resetear la misión
       setIsDeflected(false);
       setMissileLaunched(false);
       setMissionStatus('ready');
@@ -644,48 +788,28 @@ export default function App() {
   };
 
   const handleMissileImpact = () => {
-    console.log("¡Impacto detectado!");
     setMissileLaunched(false);
     setIsDeflected(true);
     setMissionStatus('success');
     setAutoLaunchArmed(false);
   };
 
-  const handleAsteroidUpdate = (position) => {
-    setAsteroidPosition(position);
-  };
-
-  const handleAsteroidDistanceUpdate = (distance) => {
-    setAsteroidDistance(distance);
-  };
-
-  const handleEarthPositionUpdate = (position) => {
-    setEarthPosition(position);
-  };
-
   const getButtonText = () => {
     switch (missionStatus) {
-      case 'ready':
-        return 'ARMAR SISTEMA DE AUTO-LANZAMIENTO';
-      case 'armed':
-        return 'SISTEMA ARMADO - ESPERANDO OBJETIVO';
-      case 'launched':
-        return 'MISIL EN CAMINO...';
-      case 'success':
-        return 'REINICIAR SIMULACIÓN';
-      default:
-        return 'ARMAR SISTEMA';
+      case 'ready': return 'ARMAR SISTEMA DE AUTO-LANZAMIENTO';
+      case 'armed': return 'SISTEMA ARMADO - ESPERANDO OBJETIVO';
+      case 'launched': return 'MISIL EN CAMINO...';
+      case 'success': return 'REINICIAR SIMULACIÓN';
+      default: return 'ARMAR SISTEMA';
     }
   };
 
   const getStatusMessage = () => {
     switch (missionStatus) {
       case 'armed':
-        if (isAsteroidClose) {
-          return <div className="auto-launch-info"> OBJETIVO EN RANGO - LANZANDO MISIL...</div>;
-        } else {
-          return <div className="waiting-for-target"> ESPERANDO QUE EL ASTEROIDE SE ACERQUE...</div>;
-        }
+        return isAsteroidClose ? 
+          <div className="auto-launch-info"> OBJETIVO EN RANGO - LANZANDO MISIL...</div> : 
+          <div className="waiting-for-target"> ESPERANDO QUE EL ASTEROIDE SE ACERQUE...</div>;
       case 'launched':
         return <div className="auto-launch-info"> MISIL EN CAMINO HACIA EL OBJETIVO</div>;
       case 'success':
@@ -696,152 +820,158 @@ export default function App() {
   };
 
   return (
-    <>
-      <style>{styles}</style>
-      <div className="app-container">
-        {/* SIDEBAR */}
-        <div className="sidebar">
-          <div className="header">
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-              <Shield style={{ color: '#ff4757' }} size={24} />
-              <h1>Alerta de Impacto</h1>
-            </div>
-            <h2>Parámetros Orbitales</h2>
+    <div className="app-container">
+      {/* SIDEBAR */}
+      <div className="sidebar">
+        <button className="back-button" onClick={onBack}>
+            <ChevronLeft size={14} /> Volver al Inicio
+        </button>
+        <div className="header" style={{marginTop: '30px'}}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+            <Shield style={{ color: '#ff4757' }} size={24} />
+            <h1>Alerta de Impacto</h1>
           </div>
+          <h2>Parámetros Orbitales</h2>
+        </div>
 
-          <div className="datos-content">
-            {/* DATOS DEL ASTEROIDE */}
-            <div className="data-row">
-              <span style={{ color: '#a4b0be' }}>Objeto:</span>
-              <span style={{ color: 'white', fontWeight: 'bold' }}>{data.Nombre}</span>
-            </div>
-            <div className="data-row">
-              <span style={{ color: '#a4b0be' }}>Diámetro:</span>
-              <span style={{ color: '#ffa502', fontWeight: 'bold' }}>{data.Diametro} km</span>
-            </div>
-            <div className="data-row">
-              <span style={{ color: '#a4b0be' }}>MOID:</span>
-              <span style={{ color: '#ff4757', fontWeight: 'bold' }}>{data.MOID} AU</span>
+        <div className="datos-content">
+          <div className="data-row">
+            <span style={{ color: '#a4b0be' }}>Objeto:</span>
+            <span style={{ color: 'white', fontWeight: 'bold' }}>{data.Nombre}</span>
+          </div>
+          <div className="data-row">
+            <span style={{ color: '#a4b0be' }}>Diámetro:</span>
+            <span style={{ color: '#ffa502', fontWeight: 'bold' }}>{data.Diametro} km</span>
+          </div>
+          <div className="data-row">
+            <span style={{ color: '#a4b0be' }}>MOID:</span>
+            <span style={{ color: '#ff4757', fontWeight: 'bold' }}>{data.MOID} AU</span>
+          </div>
+          
+          <div className="mission-control">
+            <div className="mission-title">
+              <Target size={20} />
+              Sistema de Defensa
             </div>
             
-            {/* PANEL DE CONTROL DE MISIÓN MEJORADO */}
-            <div className="mission-control">
-              <div className="mission-title">
-                <Target size={20} />
-                Sistema de Auto-Lanzamiento
+            <div style={{ marginBottom: '10px', fontSize: '0.8rem', textAlign: 'center' }}>
+              <div style={{ color: '#a4b0be', marginBottom: '4px' }}>
+                Distancia a la Tierra: <strong>{currentDistance.toFixed(1)}</strong> unidades
               </div>
-              
-              <div style={{ marginBottom: '10px', fontSize: '0.8rem', textAlign: 'center' }}>
-                <div style={{ color: '#a4b0be', marginBottom: '4px' }}>
-                  Distancia a la Tierra: <strong>{currentDistance.toFixed(1)}</strong> unidades
-                </div>
-                <div style={{ color: '#a4b0be' }}>
-                  Rango de lanzamiento: <strong>25</strong> unidades
-                </div>
+              <div style={{ color: '#a4b0be' }}>
+                Rango de lanzamiento: <strong>25</strong> unidades
               </div>
-              
-              {getStatusMessage()}
-              
-              <button 
-                className="mission-button"
-                onClick={handleArmMissile}
-                disabled={missionStatus === 'launched' || missionStatus === 'armed'}
-                style={{
-                  opacity: (missionStatus === 'launched' || missionStatus === 'armed') ? 0.7 : 1,
-                }}
-              >
-                <Rocket size={16} />
-                {getButtonText()}
-              </button>
+            </div>
+            
+            {getStatusMessage()}
+            
+            <button 
+              className="mission-button"
+              onClick={handleArmMissile}
+              disabled={missionStatus === 'launched' || missionStatus === 'armed'}
+              style={{ opacity: (missionStatus === 'launched' || missionStatus === 'armed') ? 0.7 : 1 }}
+            >
+              <Rocket size={16} />
+              {getButtonText()}
+            </button>
 
-              <div className="trajectory-info">
-                <div><strong>Estado:</strong> {isDeflected ? 'DESVIADO' : missionStatus === 'armed' ? 'ARMADO' : 'LISTO'}</div>
-                <div><strong>Distancia:</strong> {currentDistance.toFixed(1)} unidades</div>
-                <div><strong>Misil:</strong> {missileLaunched ? 'ACTIVO' : 'INACTIVO'}</div>
-                <div><strong>Auto-lanzamiento:</strong> {autoLaunchArmed ? 'ACTIVADO' : 'DESACTIVADO'}</div>
-              </div>
+            <div className="trajectory-info">
+              <div><strong>Estado:</strong> {isDeflected ? 'DESVIADO' : missionStatus === 'armed' ? 'ARMADO' : 'LISTO'}</div>
+              <div><strong>Auto-lanzamiento:</strong> {autoLaunchArmed ? 'ACTIVADO' : 'DESACTIVADO'}</div>
             </div>
+          </div>
 
-            {/* CONTROL DE VELOCIDAD */}
-            <div className="control-panel">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: '#a4b0be', marginBottom: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <Clock size={14}/> Velocidad de Tiempo
-                </div>
-                <span style={{ color: '#ffa502', fontFamily: 'monospace' }}>x{speed.toFixed(1)}</span>
+          <div className="control-panel">
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: '#a4b0be', marginBottom: '8px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <Clock size={14}/> Velocidad de Tiempo
               </div>
-              <div className="slider-container">
-                <span style={{ fontSize: '12px', color: '#666' }}>0</span>
-                <input 
-                  type="range" 
-                  min="0" 
-                  max="5" 
-                  step="0.1" 
-                  value={speed}
-                  onChange={(e) => setSpeed(parseFloat(e.target.value))}
-                  className="slider"
-                />
-                <FastForward size={14} style={{ color: '#666' }}/>
-              </div>
+              <span style={{ color: '#ffa502', fontFamily: 'monospace' }}>x{speed.toFixed(1)}</span>
             </div>
-
-            {/* DATOS ORBITALES RESTANTES */}
-            <div className="data-row">
-              <span style={{ color: '#a4b0be' }}>Semieje (a):</span>
-              <span>{data.Semieje_a} AU</span>
-            </div>
-            <div className="data-row">
-              <span style={{ color: '#a4b0be' }}>Excentricidad:</span>
-              <span>{data.Excentricidad_e}</span>
-            </div>
-            <div className="data-row">
-              <span style={{ color: '#a4b0be' }}>Inclinación:</span>
-              <span>{data.Inclinacion_i}°</span>
+            <div className="slider-container">
+              <span style={{ fontSize: '12px', color: '#666' }}>0</span>
+              <input 
+                type="range" min="0" max="5" step="0.1" value={speed}
+                onChange={(e) => setSpeed(parseFloat(e.target.value))}
+                className="slider"
+              />
+              <FastForward size={14} style={{ color: '#666' }}/>
             </div>
           </div>
         </div>
-
-        {/* SIMULACIÓN 3D */}
-        <div className="simulation-container">
-          <Canvas camera={{ position: [0, 60, 120], fov: 45 }}>
-            <color attach="background" args={['#000005']} />
-
-            <ambientLight intensity={0.05} />
-            <StarField />
-
-            <RealisticSun />
-            <RealisticEarth 
-              speedMultiplier={speed} 
-              onPositionUpdate={handleEarthPositionUpdate}
-            />
-            <AsteroidOrbit 
-              data={data} 
-              speedMultiplier={speed}
-              isDeflected={isDeflected}
-              onAsteroidUpdate={handleAsteroidUpdate}
-              onDistanceUpdate={handleAsteroidDistanceUpdate}
-              asteroidRef={asteroidRef}
-            />
-
-            {/* Misil */}
-            <Missile 
-              targetPosition={asteroidPosition}
-              onImpact={handleMissileImpact}
-              isLaunched={missileLaunched}
-              asteroidRef={asteroidRef}
-            />
-
-            <OrbitControls 
-              minDistance={5} 
-              maxDistance={500} 
-              enablePan={true}
-              enableZoom={true}
-              enableRotate={true}
-            />
-            <gridHelper args={[200, 50, 0x222222, 0x111111]} position={[0, -2, 0]} />
-          </Canvas>
-        </div>
       </div>
+
+      {/* SCENE 3D */}
+      <div className="simulation-container">
+        <Canvas camera={{ position: [0, 60, 120], fov: 45 }}>
+          <color attach="background" args={['#000005']} />
+          <ambientLight intensity={0.05} />
+          <StarField />
+          <RealisticSun />
+          <RealisticEarth speedMultiplier={speed} onPositionUpdate={setEarthPosition} />
+          <AsteroidOrbit 
+            data={data} 
+            speedMultiplier={speed}
+            isDeflected={isDeflected}
+            onAsteroidUpdate={setAsteroidPosition}
+            onDistanceUpdate={setAsteroidDistance}
+            asteroidRef={asteroidRef}
+          />
+          <Missile 
+            targetPosition={asteroidPosition}
+            onImpact={handleMissileImpact}
+            isLaunched={missileLaunched}
+            asteroidRef={asteroidRef}
+          />
+          <OrbitControls minDistance={5} maxDistance={500} />
+          <gridHelper args={[200, 50, 0x222222, 0x111111]} position={[0, -2, 0]} />
+        </Canvas>
+      </div>
+    </div>
+  );
+}
+
+// --- PANTALLA DE BIENVENIDA ---
+function LandingPage({ onStart }) {
+  return (
+    <div className="landing-container">
+      {/* VIDEO DE FONDO */}
+      <video 
+        className="video-bg" 
+        autoPlay 
+        loop 
+        playsInline
+        src='./videobackground.mp4' 
+      />
+      <div className="video-overlay"></div>
+      
+      <div className="landing-content">
+        <h1 className="app-title">Misión Apocalipsis</h1>
+        <p className="app-description text-size-xl">
+          <strong>Cosmo Coders</strong><br/>
+          Equipo 5
+        </p>
+        <button className="btn-simulacion" onClick={onStart}>
+          <Play size={24} fill="white" />
+          Iniciar Simulación
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// --- COMPONENTE PRINCIPAL QUE GESTIONA LAS VISTAS ---
+export default function App() {
+  const [started, setStarted] = useState(false);
+
+  return (
+    <>
+      <style>{styles}</style>
+      {started ? (
+        <Simulation onBack={() => setStarted(false)} />
+      ) : (
+        <LandingPage onStart={() => setStarted(true)} />
+      )}
     </>
   );
 }

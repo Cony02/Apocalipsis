@@ -5,6 +5,18 @@ import App from './App.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <>
+      <video
+        className="bg-video"
+        src="/videobackground.mp4"
+        autoPlay
+        loop
+        muted
+        playsInline
+      />
+      <div className="app-overlay">
+        <App />
+      </div>
+    </>
   </StrictMode>,
 )
