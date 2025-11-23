@@ -1,11 +1,78 @@
-body{
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
   width: 100%;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  height: 100%;
   background-color: #000000;
+  overflow: hidden;
+  /* Evita barras de scroll */
 }
-.header {
+
+.app-container {
+  display: flex;
+  flex-direction: row;
+  /* Izquierda y Derecha */
+  width: 100vw;
+  height: 100vh;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* PANEL IZQUIERDO */
+.sidebar {
+  width: 320px;
+  /* Ancho fijo */
+  min-width: 320px;
   background-color: #1a1a1a;
-  padding: 20px;
-  text-align: center;
   color: white;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid #333;
+  z-index: 10;
+  overflow-y: auto;
+}
+
+.header {
+  padding: 20px;
+  border-bottom: 1px solid #333;
+  background: #111;
+}
+
+.header h1 {
+  font-size: 1.5rem;
+  color: #ff4757;
+  margin: 0 0 5px 0;
+  font-weight: 700;
+}
+
+.header h2 {
+  font-size: 1rem;
+  color: #a4b0be;
+  margin: 0;
+  font-weight: 400;
+}
+
+.datos-content {
+  padding: 20px;
+}
+
+.data-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #2f3542;
+  font-size: 0.9rem;
+}
+
+.data-row:last-child {
+  border-bottom: none;
+}
+
+/* PANEL DERECHO (SIMULACION) */
+.simulation-container {
+  flex: 1;
+  /* Ocupa el resto del espacio */
+  position: relative;
+  background-color: #000005;
 }
