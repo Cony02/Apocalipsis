@@ -573,11 +573,11 @@ const SunMaterial = {
 // --- DATOS DEL ASTEROIDE ---
 const dataDelPython = {
   "Nombre": "4179 Toutatis (1989 AC)",
-  "Diametro": 5.4,            // Asteroide gigante, cumple la regla del 10% + grande
-  "MOID": 0.00651,            // Pasa rozando la Tierra (peligroso)
-  "Semieje_a": 2.543,         // Llega hasta el cinturón de asteroides
-  "Excentricidad_e": 0.6247,  // Órbita muy alargada (cruzadora)
-  "Inclinacion_i": 0.45,      // Muy plano respecto a la Tierra (¡Peligro!)
+  "Diametro": 5.4,            
+  "MOID": 0.00651,            
+  "Semieje_a": 2.543,         
+  "Excentricidad_e": 0.6247,  
+  "Inclinacion_i": 0.45,      
   "Nodo_Asc_om": 125.37,
   "Arg_Perihelio_w": 277.86,
   "Anomalia_Med_ma": 76.89,
@@ -779,8 +779,14 @@ const Missile = React.memo(({ targetPosition, onDetonation, isLaunched, asteroid
     if (!isLaunched || !missileRef.current || detonated.current) return;
 
     const missile = missileRef.current;
+<<<<<<< HEAD
 
     // Obtener posición actual del objetivo
+=======
+    const currentPos = missile.position.clone();
+
+    // Posición del objetivo (Asteroide)
+>>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
     const asteroidPos = new THREE.Vector3();
     if (asteroidRef && asteroidRef.current) {
       asteroidRef.current.getWorldPosition(asteroidPos);
@@ -788,6 +794,7 @@ const Missile = React.memo(({ targetPosition, onDetonation, isLaunched, asteroid
       asteroidPos.set(...targetPosition);
     }
 
+<<<<<<< HEAD
     // --- FASE DE LANZAMIENTO (Solo corre 1 vez) ---
     if (!hasLaunched.current) {
       // Si earthPosition viene como array [x,y,z] o Vector3, lo manejamos
@@ -812,6 +819,29 @@ const Missile = React.memo(({ targetPosition, onDetonation, isLaunched, asteroid
 
     // --- FASE DE VUELO ---
     const currentPos = missile.position.clone();
+=======
+    // --- LÓGICA DE INICIO (SPAWN EN SUPERFICIE) ---
+    // Esto se ejecuta solo en el primer frame del lanzamiento
+    if (!hasLaunched.current && earthPosition) {
+      const earthPosVec = new THREE.Vector3(...earthPosition);
+      // Dirección desde la Tierra hacia el asteroide
+      const directionToTarget = new THREE.Vector3().subVectors(asteroidPos, earthPosVec).normalize();
+
+      // Radio de la Tierra visual (0.3) + Atmósfera + Margen
+      const SPAWN_OFFSET = 0.8;
+
+      // Posición de spawn
+      const spawnPos = earthPosVec.add(directionToTarget.multiplyScalar(SPAWN_OFFSET));
+
+      missile.position.copy(spawnPos);
+      missile.lookAt(asteroidPos);
+      hasLaunched.current = true;
+      missile.visible = true; 
+      return; 
+    }
+
+    // --- LÓGICA DE INTERCEPCIÓN ---
+>>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
     const direction = new THREE.Vector3().subVectors(asteroidPos, currentPos).normalize();
     const distanceToTarget = currentPos.distanceTo(asteroidPos);
 
@@ -821,14 +851,22 @@ const Missile = React.memo(({ targetPosition, onDetonation, isLaunched, asteroid
       missile.visible = false;
       if (onDetonation) onDetonation(currentPos);
     } else {
+<<<<<<< HEAD
       // Movimiento guiado
       const speed = 45;
+=======
+      const speed = 40;
+>>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
       missile.position.add(direction.multiplyScalar(speed * delta));
       missile.lookAt(asteroidPos);
     }
   });
 
+<<<<<<< HEAD
   // Resetear flags si la simulación se reinicia externamente
+=======
+  // Reset cuando no está lanzado
+>>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
   useEffect(() => {
     if (!isLaunched) {
       hasLaunched.current = false;
@@ -866,7 +904,6 @@ const Missile = React.memo(({ targetPosition, onDetonation, isLaunched, asteroid
   );
 });
 
-// Efecto de onda de choque nuclear
 function Explosion({ position, onComplete }) {
   const mesh = useRef();
 
@@ -877,7 +914,10 @@ function Explosion({ position, onComplete }) {
       mesh.current.scale.y += delta * 15;
       mesh.current.scale.z += delta * 15;
 
+<<<<<<< HEAD
       // Desvanecimiento
+=======
+>>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
       mesh.current.material.opacity -= delta * 1.5;
 
       if (mesh.current.material.opacity <= 0) {
@@ -926,15 +966,25 @@ function AsteroidOrbit({ speedMultiplier, isDeflected, onAsteroidUpdate, asteroi
       const vecA = new THREE.Vector3(...posA);
       const vecB = new THREE.Vector3(...posB);
 
+<<<<<<< HEAD
+=======
+    if (originalPos && actualRef.current) {
+      let finalPos = [...originalPos];
+
+>>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
       if (isDeflected) {
         blendFactor.current = Math.min(blendFactor.current + delta * 0.5, 1);
       } else {
         blendFactor.current = 0;
       }
 
+<<<<<<< HEAD
       const finalPosVec = new THREE.Vector3().lerpVectors(vecA, vecB, blendFactor.current);
 
       actualRef.current.position.copy(finalPosVec);
+=======
+      actualRef.current.position.set(...finalPos);
+>>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
       actualRef.current.rotation.x += 0.01;
       actualRef.current.rotation.y += 0.02;
 
@@ -982,10 +1032,13 @@ function AsteroidOrbit({ speedMultiplier, isDeflected, onAsteroidUpdate, asteroi
   );
 }
 
-// --- COMPONENTE DE SIMULACIÓN (Empaqueta todo lo anterior) ---
+// --- COMPONENTE DE SIMULACIÓN ---
 function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
+<<<<<<< HEAD
   const data = dataDelPython;
 
+=======
+>>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
   const asteroidRef = useRef();
 
   const [speed, setSpeed] = useState(1);
@@ -999,10 +1052,9 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
   const [explosionPos, setExplosionPos] = useState(null);
   const [launchPending, setLaunchPending] = useState(false);
 
-  // Tuning thresholds: when asteroid < LAUNCH_THRESHOLD we enter "preparing" state;
-  // when asteroid < LAUNCH_RENDER_DISTANCE we actually launch the interceptor (visible).
-  const LAUNCH_THRESHOLD = 30; // begin preparations
-  const LAUNCH_RENDER_DISTANCE = 8; // actual visible launch
+  // Constantes de distancia para auto-lanzamiento
+  const LAUNCH_THRESHOLD = 30; 
+  const LAUNCH_RENDER_DISTANCE = 8; 
 
   const calculateDistanceToEarth = (asteroidPos) => {
     const earthPos = new THREE.Vector3(...earthPosition);
@@ -1014,7 +1066,7 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
     return calculateDistanceToEarth(asteroidPosition);
   }, [asteroidPosition, earthPosition]);
 
-  // FIX: define isAsteroidClose used by getStatusMessage and effects
+  // Determina si el asteroide está cerca
   const isAsteroidClose = currentDistance < 25;
 
   useEffect(() => {
@@ -1050,7 +1102,11 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
     }
   };
 
+<<<<<<< HEAD
   // handleDetonation simplificado
+=======
+  //Recibe posición de detonación
+>>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
   const handleDetonation = (position) => {
     setMissileLaunched(false);
     setExplosionPos(position);
@@ -1132,6 +1188,10 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
               <Target size={20} />
               Sistema de Defensa
             </div>
+<<<<<<< HEAD
+=======
+
+>>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
             <div style={{ marginBottom: '10px', fontSize: '0.8rem', textAlign: 'center' }}>
               <div style={{ color: '#a4b0be', marginBottom: '4px' }}>
                 Distancia a la Tierra: <strong>{currentDistance.toFixed(1)}</strong> unidades
@@ -1140,7 +1200,13 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
                 Rango de lanzamiento: <strong>25</strong> unidades
               </div>
             </div>
+<<<<<<< HEAD
             {getStatusMessage()}
+=======
+
+            {getStatusMessage()}
+
+>>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
             <button
               className="mission-button"
               onClick={handleArmMissile}
@@ -1191,6 +1257,10 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
           <RealisticSun />
           <RealisticEarth speedMultiplier={speed} onPositionUpdate={setEarthPosition} />
           <AsteroidOrbit
+<<<<<<< HEAD
+=======
+            data={data}
+>>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
             speedMultiplier={speed}
             isDeflected={isDeflected}
             onAsteroidUpdate={setAsteroidPosition}
@@ -1550,6 +1620,7 @@ function LandingPage({ onStart }) {
     </div>
   );
 }
+
 
 // --- APP PRINCIPAL ---
 function App() {
