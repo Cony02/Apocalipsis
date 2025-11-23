@@ -15,7 +15,7 @@ const styles = `
     width: 100%;
     height: 100%;
     background-color: #000000;
-    overflow: hidden; /* Mantiene la app "sellada" para que solo scrollee lo que nosotros queramos */
+    overflow: hidden;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   }
 
@@ -23,15 +23,14 @@ const styles = `
   .landing-wrapper {
     width: 100vw;
     height: 100vh;
-    overflow-y: auto; /* ESTO ES LO QUE PERMITE EL SCROLL */
+    overflow-y: auto;
     scroll-behavior: smooth;
     position: relative;
     background-color: transparent;
   }
 
-  /* VIDEO DE FONDO (FIJO) */
   .video-bg {
-    position: fixed; /* Se queda quieto mientras scrolleas */
+    position: fixed;
     top: 0;
     left: 0;
     width: 100%;
@@ -93,7 +92,6 @@ const styles = `
     text-shadow: 0 2px 4px rgba(0,0,0,0.8);
   }
 
-  /* BOTÓN MORADO DE INICIO */
   .btn-simulacion {
     padding: 15px 40px;
     font-size: 1.2rem;
@@ -116,7 +114,6 @@ const styles = `
     box-shadow: 0 15px 30px rgba(142, 68, 173, 0.6);
   }
 
-  /* INDICADOR DE SCROLL (Flechita saltando) */
   .scroll-indicator {
     position: absolute;
     bottom: 20px;
@@ -137,11 +134,10 @@ const styles = `
     60% {transform: translateY(-5px);}
   }
 
-  /* --- NUEVA SECCIÓN DE DOCUMENTACIÓN --- */
   .doc-section {
     position: relative;
     min-height: 100vh;
-    background-color: #0a0a0a; /* Fondo oscuro sólido para leer bien */
+    background-color: #0a0a0a;
     z-index: 2;
     padding: 80px 20px;
     color: #ecf0f1;
@@ -227,13 +223,12 @@ const styles = `
     border: 1px solid #34495e;
   }
 
-  /* --- ESTILOS DEL SIMULADOR (SIN CAMBIOS) --- */
   .app-container {
     display: flex;
     flex-direction: row;
     width: 100vw;
     height: 100vh;
-    overflow: hidden; /* El simulador NO debe scrollear */
+    overflow: hidden;
   }
 
   .back-button {
@@ -436,7 +431,6 @@ const styles = `
     100% { opacity: 0.6; }
   }
   
-  /* BOTONES DE CAMBIO DE VISTA */
   .view-toggle {
     position: absolute;
     top: 20px;
@@ -484,7 +478,6 @@ const styles = `
     opacity: 0.9;
   }
 
-  /* WAITING OVERLAY */
   .waiting-overlay {
     position: absolute;
     top: 50%;
@@ -588,9 +581,6 @@ const dataDelPython = {
 const dataOriginal = dataDelPython;
 
 // Datos "Post-Impacto" (trayectoria segura)
-// EXAGERACIÓN VISUAL:
-// En la realidad un desvío es de 0.001 grados.
-// Aquí usaremos 8 grados para que se vea claramente la separación en pantalla.
 const dataDeflectedOrbit = {
   ...dataOriginal,
   Inclinacion_i: dataOriginal.Inclinacion_i + 8.0,
@@ -779,14 +769,8 @@ const Missile = React.memo(({ targetPosition, onDetonation, isLaunched, asteroid
     if (!isLaunched || !missileRef.current || detonated.current) return;
 
     const missile = missileRef.current;
-<<<<<<< HEAD
-
-    // Obtener posición actual del objetivo
-=======
-    const currentPos = missile.position.clone();
-
-    // Posición del objetivo (Asteroide)
->>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
+    
+    // Obtener posición actual del objetivo (Asteroide)
     const asteroidPos = new THREE.Vector3();
     if (asteroidRef && asteroidRef.current) {
       asteroidRef.current.getWorldPosition(asteroidPos);
@@ -794,7 +778,6 @@ const Missile = React.memo(({ targetPosition, onDetonation, isLaunched, asteroid
       asteroidPos.set(...targetPosition);
     }
 
-<<<<<<< HEAD
     // --- FASE DE LANZAMIENTO (Solo corre 1 vez) ---
     if (!hasLaunched.current) {
       // Si earthPosition viene como array [x,y,z] o Vector3, lo manejamos
@@ -819,29 +802,6 @@ const Missile = React.memo(({ targetPosition, onDetonation, isLaunched, asteroid
 
     // --- FASE DE VUELO ---
     const currentPos = missile.position.clone();
-=======
-    // --- LÓGICA DE INICIO (SPAWN EN SUPERFICIE) ---
-    // Esto se ejecuta solo en el primer frame del lanzamiento
-    if (!hasLaunched.current && earthPosition) {
-      const earthPosVec = new THREE.Vector3(...earthPosition);
-      // Dirección desde la Tierra hacia el asteroide
-      const directionToTarget = new THREE.Vector3().subVectors(asteroidPos, earthPosVec).normalize();
-
-      // Radio de la Tierra visual (0.3) + Atmósfera + Margen
-      const SPAWN_OFFSET = 0.8;
-
-      // Posición de spawn
-      const spawnPos = earthPosVec.add(directionToTarget.multiplyScalar(SPAWN_OFFSET));
-
-      missile.position.copy(spawnPos);
-      missile.lookAt(asteroidPos);
-      hasLaunched.current = true;
-      missile.visible = true; 
-      return; 
-    }
-
-    // --- LÓGICA DE INTERCEPCIÓN ---
->>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
     const direction = new THREE.Vector3().subVectors(asteroidPos, currentPos).normalize();
     const distanceToTarget = currentPos.distanceTo(asteroidPos);
 
@@ -851,22 +811,14 @@ const Missile = React.memo(({ targetPosition, onDetonation, isLaunched, asteroid
       missile.visible = false;
       if (onDetonation) onDetonation(currentPos);
     } else {
-<<<<<<< HEAD
       // Movimiento guiado
       const speed = 45;
-=======
-      const speed = 40;
->>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
       missile.position.add(direction.multiplyScalar(speed * delta));
       missile.lookAt(asteroidPos);
     }
   });
 
-<<<<<<< HEAD
   // Resetear flags si la simulación se reinicia externamente
-=======
-  // Reset cuando no está lanzado
->>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
   useEffect(() => {
     if (!isLaunched) {
       hasLaunched.current = false;
@@ -914,10 +866,7 @@ function Explosion({ position, onComplete }) {
       mesh.current.scale.y += delta * 15;
       mesh.current.scale.z += delta * 15;
 
-<<<<<<< HEAD
       // Desvanecimiento
-=======
->>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
       mesh.current.material.opacity -= delta * 1.5;
 
       if (mesh.current.material.opacity <= 0) {
@@ -959,6 +908,7 @@ function AsteroidOrbit({ speedMultiplier, isDeflected, onAsteroidUpdate, asteroi
     progressRef.current = (progressRef.current + delta * baseSpeed * speedMultiplier) % 1;
     const idx = Math.floor(progressRef.current * pointsOriginal.length);
 
+    // Obtener puntos de ambas órbitas para interpolar
     const posA = pointsOriginal[idx] || pointsOriginal[0];
     const posB = pointsDeflected[idx] || pointsDeflected[0];
 
@@ -966,28 +916,21 @@ function AsteroidOrbit({ speedMultiplier, isDeflected, onAsteroidUpdate, asteroi
       const vecA = new THREE.Vector3(...posA);
       const vecB = new THREE.Vector3(...posB);
 
-<<<<<<< HEAD
-=======
-    if (originalPos && actualRef.current) {
-      let finalPos = [...originalPos];
-
->>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
       if (isDeflected) {
+        // Transición suave (Lerp)
         blendFactor.current = Math.min(blendFactor.current + delta * 0.5, 1);
       } else {
         blendFactor.current = 0;
       }
 
-<<<<<<< HEAD
+      // Interpolación suave entre órbita A y B
       const finalPosVec = new THREE.Vector3().lerpVectors(vecA, vecB, blendFactor.current);
 
       actualRef.current.position.copy(finalPosVec);
-=======
-      actualRef.current.position.set(...finalPos);
->>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
       actualRef.current.rotation.x += 0.01;
       actualRef.current.rotation.y += 0.02;
 
+      // Throttle para updates de React
       if (Math.random() > 0.8) {
         if (onAsteroidUpdate) onAsteroidUpdate([finalPosVec.x, finalPosVec.y, finalPosVec.z]);
         if (onDistanceUpdate) onDistanceUpdate(finalPosVec.length());
@@ -1034,11 +977,7 @@ function AsteroidOrbit({ speedMultiplier, isDeflected, onAsteroidUpdate, asteroi
 
 // --- COMPONENTE DE SIMULACIÓN ---
 function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
-<<<<<<< HEAD
-  const data = dataDelPython;
-
-=======
->>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
+  const data = dataDelPython; // Necesario para la UI lateral
   const asteroidRef = useRef();
 
   const [speed, setSpeed] = useState(1);
@@ -1066,17 +1005,13 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
     return calculateDistanceToEarth(asteroidPosition);
   }, [asteroidPosition, earthPosition]);
 
-  // Determina si el asteroide está cerca
-  const isAsteroidClose = currentDistance < 25;
-
   useEffect(() => {
     // Lógica de "Pendiente" (aviso visual)
     if (autoLaunchArmed && currentDistance < LAUNCH_THRESHOLD && missionStatus === 'armed' && !missileLaunched) {
       setLaunchPending(true);
     }
 
-    // CORRECCIÓN AQUÍ:
-    // Antes solo verificaba la distancia. Ahora verifica que esté ARMADO explícitamente.
+    // Lógica de Lanzamiento Automático
     if (
       autoLaunchArmed &&
       missionStatus === 'armed' &&
@@ -1102,11 +1037,6 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
     }
   };
 
-<<<<<<< HEAD
-  // handleDetonation simplificado
-=======
-  //Recibe posición de detonación
->>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
   const handleDetonation = (position) => {
     setMissileLaunched(false);
     setExplosionPos(position);
@@ -1188,10 +1118,7 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
               <Target size={20} />
               Sistema de Defensa
             </div>
-<<<<<<< HEAD
-=======
 
->>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
             <div style={{ marginBottom: '10px', fontSize: '0.8rem', textAlign: 'center' }}>
               <div style={{ color: '#a4b0be', marginBottom: '4px' }}>
                 Distancia a la Tierra: <strong>{currentDistance.toFixed(1)}</strong> unidades
@@ -1200,13 +1127,9 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
                 Rango de lanzamiento: <strong>25</strong> unidades
               </div>
             </div>
-<<<<<<< HEAD
-            {getStatusMessage()}
-=======
 
             {getStatusMessage()}
 
->>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
             <button
               className="mission-button"
               onClick={handleArmMissile}
@@ -1244,7 +1167,6 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
 
       {/* SCENE 3D */}
       <div className="simulation-container">
-        {/* Overlay logic: waiting -> preparing */}
         {missionStatus === 'armed' && !missileLaunched && (
           <div className="waiting-overlay">
             {launchPending ? 'OBJETIVO EN RANGO - PREPARANDO LANZAMIENTO...' : 'ESPERANDO QUE EL ASTEROIDE ENTRE EN RANGO PARA LANZAR...'}
@@ -1257,10 +1179,6 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
           <RealisticSun />
           <RealisticEarth speedMultiplier={speed} onPositionUpdate={setEarthPosition} />
           <AsteroidOrbit
-<<<<<<< HEAD
-=======
-            data={data}
->>>>>>> 18d1caef7a8c43fb9a8f5525e45e3530b61baaed
             speedMultiplier={speed}
             isDeflected={isDeflected}
             onAsteroidUpdate={setAsteroidPosition}
@@ -1268,7 +1186,6 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
             asteroidRef={asteroidRef}
           />
 
-          {/* MISIL solo aparece cuando isLaunched y launchPending son false */}
           {missileLaunched && (
             <Missile
               targetPosition={asteroidPosition}
@@ -1279,7 +1196,6 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
             />
           )}
 
-          {/* RENDERIZAR EXPLOSIÓN SI OCURRIÓ */}
           {explosionPos && (
             <Explosion
               position={explosionPos}
