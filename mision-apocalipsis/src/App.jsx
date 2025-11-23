@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Html, Line } from '@react-three/drei';
-import { AlertTriangle, Info, Shield, Clock, FastForward, Target, Rocket, Play, ChevronLeft } from 'lucide-react';
+import { AlertTriangle, Info, Shield, Clock, FastForward, Target, Rocket, Play, ChevronLeft, ChevronDown, Code, Globe, Cpu, Layers } from 'lucide-react';
 import * as THREE from 'three';
 
 // Safety fallback: avoids ReferenceError if a component accidentally references asteroidRef
@@ -15,28 +15,23 @@ const styles = `
     width: 100%;
     height: 100%;
     background-color: #000000;
-    overflow: hidden;
+    overflow: hidden; /* Mantiene la app "sellada" para que solo scrollee lo que nosotros queramos */
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   }
 
-  /* PANTALLA DE BIENVENIDA */
-  .landing-container {
+  /* --- PANTALLA DE BIENVENIDA (ESTRUCTURA SCROLLABLE) --- */
+  .landing-wrapper {
     width: 100vw;
     height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background-color: #000; /* Fondo de respaldo */
-    color: white;
-    text-align: center;
+    overflow-y: auto; /* ESTO ES LO QUE PERMITE EL SCROLL */
+    scroll-behavior: smooth;
     position: relative;
-    overflow: hidden;
+    background-color: transparent;
   }
 
-  /* Estilos para el video de fondo */
+  /* VIDEO DE FONDO (FIJO) */
   .video-bg {
-    position: absolute;
+    position: fixed; /* Se queda quieto mientras scrolleas */
     top: 0;
     left: 0;
     width: 100%;
@@ -45,23 +40,36 @@ const styles = `
     z-index: 0;
   }
 
-  /* Capa oscura sobre el video para mejorar legibilidad */
   .video-overlay {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.5); /* Oscurece el video un 50% */
+    background: rgba(0, 0, 0, 0.5);
     z-index: 1;
+  }
+
+  .landing-hero {
+    position: relative;
+    min-height: 100vh; 
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+    padding-bottom: 60px;
   }
 
   .landing-content {
     position: relative;
-    z-index: 2; /* Asegura que el contenido esté sobre el video */
     display: flex;
     flex-direction: column;
     align-items: center;
+    text-align: center;
+    color: white;
+    padding: 20px;
   }
 
   .app-title {
@@ -85,6 +93,7 @@ const styles = `
     text-shadow: 0 2px 4px rgba(0,0,0,0.8);
   }
 
+  /* BOTÓN MORADO DE INICIO */
   .btn-simulacion {
     padding: 15px 40px;
     font-size: 1.2rem;
@@ -107,12 +116,124 @@ const styles = `
     box-shadow: 0 15px 30px rgba(142, 68, 173, 0.6);
   }
 
-  /* ESTILOS DEL SIMULADOR */
+  /* INDICADOR DE SCROLL (Flechita saltando) */
+  .scroll-indicator {
+    position: absolute;
+    bottom: 20px;
+    animation: bounce 2s infinite;
+    opacity: 0.8;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-size: 0.9rem;
+    color: #dfe4ea;
+    cursor: pointer;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+  }
+
+  @keyframes bounce {
+    0%, 20%, 50%, 80%, 100% {transform: translateY(0);}
+    40% {transform: translateY(-10px);}
+    60% {transform: translateY(-5px);}
+  }
+
+  /* --- NUEVA SECCIÓN DE DOCUMENTACIÓN --- */
+  .doc-section {
+    position: relative;
+    min-height: 100vh;
+    background-color: #0a0a0a; /* Fondo oscuro sólido para leer bien */
+    z-index: 2;
+    padding: 80px 20px;
+    color: #ecf0f1;
+    border-top: 1px solid #333;
+    box-shadow: 0 -20px 50px rgba(0,0,0,0.8);
+  }
+
+  .doc-container {
+    max-width: 1000px;
+    margin: 0 auto;
+  }
+
+  .doc-title {
+    font-size: 2.5rem;
+    margin-bottom: 3rem;
+    text-align: center;
+    background: linear-gradient(90deg, #fff, #a4b0be);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 700;
+  }
+
+  .doc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 30px;
+  }
+
+  .doc-card {
+    background: #1e1e1e;
+    padding: 30px;
+    border-radius: 12px;
+    border: 1px solid #333;
+    transition: transform 0.3s ease;
+  }
+
+  .doc-card:hover {
+    transform: translateY(-5px);
+    border-color: #8e44ad;
+  }
+
+  .card-icon {
+    color: #8e44ad;
+    margin-bottom: 15px;
+  }
+
+  .card-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: white;
+  }
+
+  .card-text {
+    font-size: 0.95rem;
+    color: #bdc3c7;
+    line-height: 1.6;
+  }
+
+  .tech-stack {
+    margin-top: 60px;
+    text-align: center;
+    padding: 40px;
+    background: #151515;
+    border-radius: 12px;
+  }
+
+  .tech-badges {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin-top: 20px;
+  }
+
+  .badge {
+    background: #2c3e50;
+    color: #ecf0f1;
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-family: monospace;
+    border: 1px solid #34495e;
+  }
+
+  /* --- ESTILOS DEL SIMULADOR (SIN CAMBIOS) --- */
   .app-container {
     display: flex;
     flex-direction: row;
     width: 100vw;
     height: 100vh;
+    overflow: hidden; /* El simulador NO debe scrollear */
   }
 
   .back-button {
@@ -316,72 +437,72 @@ const styles = `
   }
   
   /* BOTONES DE CAMBIO DE VISTA */
-.view-toggle {
-  position: absolute;
-  top: 20px;
-  right: 20px;
-  z-index: 1000;
-  display: flex;
-  gap: 10px;
-  background: rgba(0, 0, 0, 0.7);
-  padding: 8px;
-  border-radius: 10px;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
+  .view-toggle {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    display: flex;
+    gap: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 8px;
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
 
-.view-button {
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 0.8rem;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
+  .view-button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
 
-.view-button-3d {
-  background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%);
-  color: white;
-}
+  .view-button-3d {
+    background: linear-gradient(135deg, #8e44ad 0%, #9b59b6 100%);
+    color: white;
+  }
 
-.view-button-2d {
-  background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
-  color: white;
-}
+  .view-button-2d {
+    background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+    color: white;
+  }
 
-.view-button-active {
-  transform: scale(1.05);
-  box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
-}
+  .view-button-active {
+    transform: scale(1.05);
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+  }
 
-.view-button:not(.view-button-active):hover {
-  transform: translateY(-2px);
-  opacity: 0.9;
-}
+  .view-button:not(.view-button-active):hover {
+    transform: translateY(-2px);
+    opacity: 0.9;
+  }
 
-/* WAITING OVERLAY */
-.waiting-overlay {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 2000;
-  background: rgba(0,0,0,0.7);
-  color: #ffdca3;
-  padding: 14px 20px;
-  border-radius: 10px;
-  font-weight: 700;
-  letter-spacing: 0.6px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 8px 30px rgba(0,0,0,0.6);
-  backdrop-filter: blur(6px);
-  text-align: center;
-  font-size: 14px;
-}
+  /* WAITING OVERLAY */
+  .waiting-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2000;
+    background: rgba(0,0,0,0.7);
+    color: #ffdca3;
+    padding: 14px 20px;
+    border-radius: 10px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+    backdrop-filter: blur(6px);
+    text-align: center;
+    font-size: 14px;
+  }
 `;
 
 // --- SHADERS AVANZADOS ---
@@ -461,6 +582,20 @@ const dataDelPython = {
   "Arg_Perihelio_w": 277.86,
   "Anomalia_Med_ma": 76.89,
   "Epoca": 2461000.5
+};
+
+// Datos originales (trayectoria de colisión)
+const dataOriginal = dataDelPython;
+
+// Datos "Post-Impacto" (trayectoria segura)
+// EXAGERACIÓN VISUAL:
+// En la realidad un desvío es de 0.001 grados.
+// Aquí usaremos 8 grados para que se vea claramente la separación en pantalla.
+const dataDeflectedOrbit = {
+  ...dataOriginal,
+  Inclinacion_i: dataOriginal.Inclinacion_i + 8.0,
+  Nodo_Asc_om: dataOriginal.Nodo_Asc_om - 5.0,
+  Semieje_a: dataOriginal.Semieje_a + 0.2
 };
 
 // --- FUNCIONES DE ORBITA ---
@@ -605,14 +740,14 @@ function RealisticEarth({ speedMultiplier, onPositionUpdate }) {
           />
         </mesh>
         <mesh scale={[1.2, 1.2, 1.2]}>
-           <sphereGeometry args={[0.3, 64, 64]} />
-           <shaderMaterial
-              attach="material"
-              args={[AtmosphereMaterial]}
-              side={THREE.BackSide}
-              blending={THREE.AdditiveBlending}
-              transparent
-           />
+          <sphereGeometry args={[0.3, 64, 64]} />
+          <shaderMaterial
+            attach="material"
+            args={[AtmosphereMaterial]}
+            side={THREE.BackSide}
+            blending={THREE.AdditiveBlending}
+            transparent
+          />
         </mesh>
         <Html distanceFactor={20} position={[0, 0.5, 0]}>
           <div style={{
@@ -634,20 +769,18 @@ function RealisticEarth({ speedMultiplier, onPositionUpdate }) {
   );
 }
 
-function Missile({ targetPosition, onDetonation, isLaunched, asteroidRef, earthPosition }) {
+// Usamos React.memo para evitar que el misil se re-renderice
+const Missile = React.memo(({ targetPosition, onDetonation, isLaunched, asteroidRef, earthPosition }) => {
   const missileRef = useRef();
   const detonated = useRef(false);
-
-  // Referencia para saber si ya posicionamos el misil en la superficie
   const hasLaunched = useRef(false);
 
   useFrame((state, delta) => {
     if (!isLaunched || !missileRef.current || detonated.current) return;
 
     const missile = missileRef.current;
-    const currentPos = missile.position.clone();
-    
-    // Posición del objetivo (Asteroide)
+
+    // Obtener posición actual del objetivo
     const asteroidPos = new THREE.Vector3();
     if (asteroidRef && asteroidRef.current) {
       asteroidRef.current.getWorldPosition(asteroidPos);
@@ -655,92 +788,98 @@ function Missile({ targetPosition, onDetonation, isLaunched, asteroidRef, earthP
       asteroidPos.set(...targetPosition);
     }
 
-    // --- LÓGICA DE INICIO (SPAWN EN SUPERFICIE) ---
-    // Esto se ejecuta solo en el primer frame del lanzamiento
-    if (!hasLaunched.current && earthPosition) {
-       const earthPosVec = new THREE.Vector3(...earthPosition);
-       // Calculamos vector dirección: Desde Tierra -> Asteroide
-       const directionToTarget = new THREE.Vector3().subVectors(asteroidPos, earthPosVec).normalize();
-       
-       // Radio de la Tierra visual (0.3) + Atmósfera + Margen
-       const SPAWN_OFFSET = 0.8; 
-       
-       // Colocamos el misil en la superficie mirando al objetivo
-       const spawnPos = earthPosVec.add(directionToTarget.multiplyScalar(SPAWN_OFFSET));
-       
-       missile.position.copy(spawnPos);
-       missile.lookAt(asteroidPos);
-       hasLaunched.current = true;
-       missile.visible = true; // Hacemos visible justo ahora
-       return; // Saltamos movimiento este frame para que se asiente
+    // --- FASE DE LANZAMIENTO (Solo corre 1 vez) ---
+    if (!hasLaunched.current) {
+      // Si earthPosition viene como array [x,y,z] o Vector3, lo manejamos
+      const earthPosVec = Array.isArray(earthPosition)
+        ? new THREE.Vector3(...earthPosition)
+        : new THREE.Vector3(0, 0, 0);
+
+      // Vector de dirección Tierra -> Asteroide
+      const directionToTarget = new THREE.Vector3().subVectors(asteroidPos, earthPosVec).normalize();
+
+      // SPAWN: Salir ya desde la atmósfera (radio 0.3 + offset)
+      const SPAWN_OFFSET = 1.0;
+      const spawnPos = earthPosVec.clone().add(directionToTarget.multiplyScalar(SPAWN_OFFSET));
+
+      missile.position.copy(spawnPos);
+      missile.lookAt(asteroidPos);
+
+      missile.visible = true; // Hacemos visible el misil ahora
+      hasLaunched.current = true;
+      return;
     }
-    
-    // --- LÓGICA DE INTERCEPCIÓN ---
+
+    // --- FASE DE VUELO ---
+    const currentPos = missile.position.clone();
     const direction = new THREE.Vector3().subVectors(asteroidPos, currentPos).normalize();
     const distanceToTarget = currentPos.distanceTo(asteroidPos);
 
-    const STANDOFF_DISTANCE = 1.5;
-
-    if (distanceToTarget < STANDOFF_DISTANCE) {
+    // Detonación por proximidad
+    if (distanceToTarget < 1.5) {
       detonated.current = true;
       missile.visible = false;
       if (onDetonation) onDetonation(currentPos);
     } else {
-      const speed = 40; 
+      // Movimiento guiado
+      const speed = 45;
       missile.position.add(direction.multiplyScalar(speed * delta));
       missile.lookAt(asteroidPos);
     }
-
-    // Kill switch si se va muy lejos
-    if (currentPos.length() > 1000) {
-      detonated.current = true;
-      missile.visible = false;
-    }
   });
 
-  // Efecto para reiniciar flags si se resetea la simulación
+  // Resetear flags si la simulación se reinicia externamente
   useEffect(() => {
     if (!isLaunched) {
-        hasLaunched.current = false;
-        detonated.current = false;
-        if(missileRef.current) missileRef.current.visible = false;
+      hasLaunched.current = false;
+      detonated.current = false;
+      if (missileRef.current) missileRef.current.visible = false;
     }
   }, [isLaunched]);
 
+  // Render inicial invisible (se hace visible en el useFrame)
+  if (!isLaunched) return null;
+
   return (
-    <>
-      {isLaunched && !detonated.current && (
-        <group ref={missileRef} visible={false}> {/* Empieza invisible */}
-          {/* Geometría del misil */}
-          <mesh rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.05, 0.1, 0.6, 8]} />
-            <meshStandardMaterial color="#fff" emissive="#555" />
-          </mesh>
-          {/* Cola de fuego */}
-          <mesh position={[0, 0, 0.4]}>
-            <sphereGeometry args={[0.08, 8, 8]} />
-            <meshBasicMaterial color="orange" />
-          </mesh>
-        </group>
-      )}
-    </>
+    <group ref={missileRef} visible={false}>
+      {/* Cuerpo del misil */}
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <cylinderGeometry args={[0.05, 0.1, 0.6, 8]} />
+        <meshStandardMaterial color="#dfe6e9" metalness={0.8} roughness={0.2} />
+      </mesh>
+      {/* Aletas */}
+      <mesh position={[0, 0, 0.25]}>
+        <boxGeometry args={[0.3, 0.02, 0.1]} />
+        <meshStandardMaterial color="#636e72" />
+      </mesh>
+      <mesh position={[0, 0, 0.25]} rotation={[0, 0, Math.PI / 2]}>
+        <boxGeometry args={[0.3, 0.02, 0.1]} />
+        <meshStandardMaterial color="#636e72" />
+      </mesh>
+      {/* Motor (Luz y forma) */}
+      <mesh position={[0, 0, 0.35]}>
+        <sphereGeometry args={[0.06, 8, 8]} />
+        <meshBasicMaterial color="#ff7675" />
+      </mesh>
+      <pointLight position={[0, 0, 0.4]} color="orange" intensity={2} distance={3} decay={2} />
+    </group>
   );
-}
+});
 
 // Efecto de onda de choque nuclear
 function Explosion({ position, onComplete }) {
   const mesh = useRef();
-  
+
   useFrame((_, delta) => {
     if (mesh.current) {
       // Expansión rápida
       mesh.current.scale.x += delta * 15;
       mesh.current.scale.y += delta * 15;
       mesh.current.scale.z += delta * 15;
-      
+
       // Desvanecimiento
       mesh.current.material.opacity -= delta * 1.5;
-      
+
       if (mesh.current.material.opacity <= 0) {
         onComplete();
       }
@@ -756,77 +895,76 @@ function Explosion({ position, onComplete }) {
   );
 }
 
-function AsteroidOrbit({ data, speedMultiplier, isDeflected, onAsteroidUpdate, asteroidRef, onDistanceUpdate }) {
-  const points = useMemo(() =>
-    getOrbitPoints(data.Semieje_a, data.Excentricidad_e, data.Inclinacion_i, data.Nodo_Asc_om, data.Arg_Perihelio_w),
-    [data]
+function AsteroidOrbit({ speedMultiplier, isDeflected, onAsteroidUpdate, asteroidRef, onDistanceUpdate }) {
+  // 1. Calculamos la órbita ORIGINAL (Roja/Peligro)
+  const pointsOriginal = useMemo(() =>
+    getOrbitPoints(dataOriginal.Semieje_a, dataOriginal.Excentricidad_e, dataOriginal.Inclinacion_i, dataOriginal.Nodo_Asc_om, dataOriginal.Arg_Perihelio_w),
+    []
+  );
+
+  // 2. Calculamos la órbita DESVIADA (Verde/Segura)
+  const pointsDeflected = useMemo(() =>
+    getOrbitPoints(dataDeflectedOrbit.Semieje_a, dataDeflectedOrbit.Excentricidad_e, dataDeflectedOrbit.Inclinacion_i, dataDeflectedOrbit.Nodo_Asc_om, dataDeflectedOrbit.Arg_Perihelio_w),
+    []
   );
 
   const internalAsteroidRef = useRef();
   const progressRef = useRef(0);
-  const deflectionProgress = useRef(0);
+  const blendFactor = useRef(0);
 
   const actualRef = asteroidRef || internalAsteroidRef;
 
   useFrame((_, delta) => {
     const baseSpeed = 0.05;
     progressRef.current = (progressRef.current + delta * baseSpeed * speedMultiplier) % 1;
+    const idx = Math.floor(progressRef.current * pointsOriginal.length);
 
-    const idx = Math.floor(progressRef.current * points.length);
-    const originalPos = points[idx] || points[0];
+    const posA = pointsOriginal[idx] || pointsOriginal[0];
+    const posB = pointsDeflected[idx] || pointsDeflected[0];
 
-    if (originalPos && actualRef.current) {
-      let finalPos = [...originalPos];
-      
+    if (posA && posB && actualRef.current) {
+      const vecA = new THREE.Vector3(...posA);
+      const vecB = new THREE.Vector3(...posB);
+
       if (isDeflected) {
-        deflectionProgress.current = Math.min(deflectionProgress.current + delta * 0.5, 1);
-        finalPos[0] += deflectionProgress.current * 15;
-        finalPos[1] += deflectionProgress.current * 8;
-        finalPos[2] += deflectionProgress.current * 5;
+        blendFactor.current = Math.min(blendFactor.current + delta * 0.5, 1);
       } else {
-        deflectionProgress.current = 0;
+        blendFactor.current = 0;
       }
-      
-      actualRef.current.position.set(...finalPos);
+
+      const finalPosVec = new THREE.Vector3().lerpVectors(vecA, vecB, blendFactor.current);
+
+      actualRef.current.position.copy(finalPosVec);
       actualRef.current.rotation.x += 0.01;
       actualRef.current.rotation.y += 0.02;
 
-      if (onAsteroidUpdate) onAsteroidUpdate(finalPos);
-
-      const distanceFromCenter = Math.sqrt(finalPos[0] ** 2 + finalPos[1] ** 2 + finalPos[2] ** 2);
-      if (onDistanceUpdate) onDistanceUpdate(distanceFromCenter);
+      if (Math.random() > 0.8) {
+        if (onAsteroidUpdate) onAsteroidUpdate([finalPosVec.x, finalPosVec.y, finalPosVec.z]);
+        if (onDistanceUpdate) onDistanceUpdate(finalPosVec.length());
+      }
     }
   });
 
   const asteroidColor = isDeflected ? "#2ed573" : "#888888";
-  const labelBg = isDeflected ? 'rgba(46, 213, 115, 0.8)' : 'rgba(255, 71, 87, 0.8)';
-  const labelBorder = isDeflected ? '#2ed573' : '#ff4757';
 
   return (
     <>
-      <Line points={points} color="#ff4757" lineWidth={1} opacity={0.4} transparent />
+      <Line points={pointsOriginal} color="#ff4757" lineWidth={1} opacity={0.3} transparent />
       {isDeflected && (
-        <Line
-          points={points.map((point, index) => {
-            const progress = index / points.length;
-            const deflectionAmount = progress * deflectionProgress.current * 15;
-            return [point[0] + deflectionAmount, point[1] + deflectionAmount * 0.8, point[2] + deflectionAmount * 0.5];
-          })}
-          color="#2ed573" lineWidth={2} opacity={0.8} transparent
-        />
+        <Line points={pointsDeflected} color="#2ed573" lineWidth={1} opacity={0.6} transparent />
       )}
       <mesh ref={actualRef}>
         <dodecahedronGeometry args={[0.6, 0]} />
         <meshStandardMaterial color={asteroidColor} roughness={0.8} metalness={0.2} emissive={isDeflected ? new THREE.Color(0x2ed573).multiplyScalar(0.3) : new THREE.Color(0x000000)} />
         <Html distanceFactor={30}>
           <div style={{
-            backgroundColor: labelBg,
+            backgroundColor: isDeflected ? 'rgba(46, 213, 115, 0.8)' : 'rgba(255, 71, 87, 0.8)',
             color: 'white',
             padding: '4px 8px',
             borderRadius: '4px',
             fontSize: '12px',
             fontWeight: 'bold',
-            border: `1px solid ${labelBorder}`,
+            border: `1px solid ${isDeflected ? '#2ed573' : '#ff4757'}`,
             pointerEvents: 'none',
             userSelect: 'none',
             display: 'flex',
@@ -836,7 +974,7 @@ function AsteroidOrbit({ data, speedMultiplier, isDeflected, onAsteroidUpdate, a
             transition: 'all 0.3s ease'
           }}>
             <AlertTriangle size={12} />
-            {data.Nombre} {isDeflected && '✓'}
+            {dataOriginal.Nombre} {isDeflected && '✓'}
           </div>
         </Html>
       </mesh>
@@ -846,10 +984,10 @@ function AsteroidOrbit({ data, speedMultiplier, isDeflected, onAsteroidUpdate, a
 
 // --- COMPONENTE DE SIMULACIÓN (Empaqueta todo lo anterior) ---
 function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
-  // Always define asteroidRef here to avoid ReferenceError
+  const data = dataDelPython;
+
   const asteroidRef = useRef();
 
-  const data = dataDelPython;
   const [speed, setSpeed] = useState(1);
   const [isDeflected, setIsDeflected] = useState(false);
   const [missileLaunched, setMissileLaunched] = useState(false);
@@ -878,12 +1016,21 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
 
   // FIX: define isAsteroidClose used by getStatusMessage and effects
   const isAsteroidClose = currentDistance < 25;
-  
+
   useEffect(() => {
+    // Lógica de "Pendiente" (aviso visual)
     if (autoLaunchArmed && currentDistance < LAUNCH_THRESHOLD && missionStatus === 'armed' && !missileLaunched) {
       setLaunchPending(true);
     }
-    if (currentDistance < LAUNCH_RENDER_DISTANCE && !missileLaunched) {
+
+    // CORRECCIÓN AQUÍ:
+    // Antes solo verificaba la distancia. Ahora verifica que esté ARMADO explícitamente.
+    if (
+      autoLaunchArmed &&
+      missionStatus === 'armed' &&
+      currentDistance < LAUNCH_RENDER_DISTANCE &&
+      !missileLaunched
+    ) {
       setMissileLaunched(true);
       setMissionStatus('launched');
       setLaunchPending(false);
@@ -903,11 +1050,10 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
     }
   };
 
-  // NUEVO: detonación en standoff (recibe posición de detonación)
+  // handleDetonation simplificado
   const handleDetonation = (position) => {
     setMissileLaunched(false);
     setExplosionPos(position);
-    // Tras la detonación, aplicamos el desvío con pequeño retardo
     setTimeout(() => {
       setIsDeflected(true);
       setMissionStatus('success');
@@ -937,16 +1083,16 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
 
   return (
     <div className="app-container">
-  
+
       {/* BOTONES DE CAMBIO DE VISTA */}
       <div className="view-toggle">
-        <button 
+        <button
           className={`view-button view-button-3d ${currentView === '3D' ? 'view-button-active' : ''}`}
           onClick={() => onViewChange('3D')}
         >
           🌌 3D
         </button>
-        <button 
+        <button
           className={`view-button view-button-2d ${currentView === '2D' ? 'view-button-active' : ''}`}
           onClick={() => onViewChange('2D')}
         >
@@ -957,9 +1103,9 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
       {/* SIDEBAR */}
       <div className="sidebar">
         <button className="back-button" onClick={onBack}>
-            <ChevronLeft size={14} /> Volver al Inicio
+          <ChevronLeft size={14} /> Volver al Inicio
         </button>
-        <div className="header" style={{marginTop: '30px'}}>
+        <div className="header" style={{ marginTop: '30px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
             <Shield style={{ color: '#ff4757' }} size={24} />
             <h1>Alerta de Impacto</h1>
@@ -980,13 +1126,12 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
             <span style={{ color: '#a4b0be' }}>MOID:</span>
             <span style={{ color: '#ff4757', fontWeight: 'bold' }}>{data.MOID} AU</span>
           </div>
-          
+
           <div className="mission-control">
             <div className="mission-title">
               <Target size={20} />
               Sistema de Defensa
             </div>
-            
             <div style={{ marginBottom: '10px', fontSize: '0.8rem', textAlign: 'center' }}>
               <div style={{ color: '#a4b0be', marginBottom: '4px' }}>
                 Distancia a la Tierra: <strong>{currentDistance.toFixed(1)}</strong> unidades
@@ -995,10 +1140,8 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
                 Rango de lanzamiento: <strong>25</strong> unidades
               </div>
             </div>
-            
             {getStatusMessage()}
-            
-            <button 
+            <button
               className="mission-button"
               onClick={handleArmMissile}
               disabled={missionStatus === 'launched' || missionStatus === 'armed' || !simulationStarted}
@@ -1007,7 +1150,6 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
               <Rocket size={16} />
               {getButtonText()}
             </button>
-
             <div className="trajectory-info">
               <div><strong>Estado:</strong> {isDeflected ? 'DESVIADO' : missionStatus === 'armed' ? 'ARMADO' : 'LISTO'}</div>
               <div><strong>Auto-lanzamiento:</strong> {autoLaunchArmed ? 'ACTIVADO' : 'DESACTIVADO'}</div>
@@ -1017,18 +1159,18 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
           <div className="control-panel">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: '#a4b0be', marginBottom: '8px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Clock size={14}/> Velocidad de Tiempo
+                <Clock size={14} /> Velocidad de Tiempo
               </div>
               <span style={{ color: '#ffa502', fontFamily: 'monospace' }}>x{speed.toFixed(1)}</span>
             </div>
             <div className="slider-container">
               <span style={{ fontSize: '12px', color: '#666' }}>0</span>
-              <input 
+              <input
                 type="range" min="0" max="5" step="0.1" value={speed}
                 onChange={(e) => setSpeed(parseFloat(e.target.value))}
                 className="slider"
               />
-              <FastForward size={14} style={{ color: '#666' }}/>
+              <FastForward size={14} style={{ color: '#666' }} />
             </div>
           </div>
         </div>
@@ -1048,8 +1190,7 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
           <StarField />
           <RealisticSun />
           <RealisticEarth speedMultiplier={speed} onPositionUpdate={setEarthPosition} />
-          <AsteroidOrbit 
-            data={data} 
+          <AsteroidOrbit
             speedMultiplier={speed}
             isDeflected={isDeflected}
             onAsteroidUpdate={setAsteroidPosition}
@@ -1059,7 +1200,7 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
 
           {/* MISIL solo aparece cuando isLaunched y launchPending son false */}
           {missileLaunched && (
-            <Missile 
+            <Missile
               targetPosition={asteroidPosition}
               onDetonation={handleDetonation}
               isLaunched={missileLaunched}
@@ -1070,9 +1211,9 @@ function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
 
           {/* RENDERIZAR EXPLOSIÓN SI OCURRIÓ */}
           {explosionPos && (
-            <Explosion 
-              position={explosionPos} 
-              onComplete={() => setExplosionPos(null)} 
+            <Explosion
+              position={explosionPos}
+              onComplete={() => setExplosionPos(null)}
             />
           )}
 
@@ -1140,7 +1281,7 @@ function Simulation2D({ onBack, currentView, onViewChange, simulationStarted }) 
       if (missileLaunched) {
         const dx = asteroidPosRef.current.x - missilePosRef.current.x;
         const dy = asteroidPosRef.current.y - missilePosRef.current.y;
-        const distToTarget = Math.sqrt(dx*dx + dy*dy);
+        const distToTarget = Math.sqrt(dx * dx + dy * dy);
         if (distToTarget < 20) {
           handleMissileImpact();
         } else {
@@ -1234,9 +1375,9 @@ function Simulation2D({ onBack, currentView, onViewChange, simulationStarted }) 
         zIndex: 10
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background:'rgba(0,0,0,0.5)', padding:'5px', borderRadius:'8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.5)', padding: '5px', borderRadius: '8px' }}>
             <Shield style={{ color: '#ff4757' }} size={24} />
-            <h1 style={{ fontSize: '1.2rem', margin: 0, color:'white' }}>Vista Táctica 2D</h1>
+            <h1 style={{ fontSize: '1.2rem', margin: 0, color: 'white' }}>Vista Táctica 2D</h1>
           </div>
           <button
             className="back-button"
@@ -1268,7 +1409,7 @@ function Simulation2D({ onBack, currentView, onViewChange, simulationStarted }) 
             marginBottom: '15px',
             textAlign: 'center'
           }}>
-            <div style={{fontWeight:'bold', color: missionStatus === 'success' ? '#2ed573' : '#ff4757', marginBottom:'5px'}}>
+            <div style={{ fontWeight: 'bold', color: missionStatus === 'success' ? '#2ed573' : '#ff4757', marginBottom: '5px' }}>
               ESTADO: {missionStatus.toUpperCase()}
             </div>
             {missionStatus === 'armed' && <div className="waiting-for-target">RADAR ACTIVO</div>}
@@ -1283,8 +1424,8 @@ function Simulation2D({ onBack, currentView, onViewChange, simulationStarted }) 
             {missionStatus === 'success' ? 'REINICIAR SISTEMA' : (missionStatus === 'armed' ? 'DESARMAR' : 'ARMAR INTERCEPTOR')}
           </button>
           <div style={{ marginTop: '20px', borderTop: '1px solid #333', paddingTop: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#a4b0be', fontSize:'0.8rem', marginBottom:'5px' }}>
-              <Clock size={12}/> Velocidad Simulación (x{speed})
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#a4b0be', fontSize: '0.8rem', marginBottom: '5px' }}>
+              <Clock size={12} /> Velocidad Simulación (x{speed})
             </div>
             <input
               type="range" min="0" max="5" step="0.1" value={speed}
@@ -1301,41 +1442,109 @@ function Simulation2D({ onBack, currentView, onViewChange, simulationStarted }) 
 
 // --- PANTALLA DE BIENVENIDA ---
 function LandingPage({ onStart }) {
+  const scrollToDocs = () => {
+    document.getElementById('tech-docs')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   return (
-    <div className="landing-container">
-      <video 
-        className="video-bg" 
-        autoPlay 
-        loop 
+    <div className="landing-wrapper">
+      <video
+        className="video-bg"
+        autoPlay
+        loop
         playsInline
-        src='./videobackground.mp4' 
+        src='./videobackground.mp4'
         muted
       />
       <div className="video-overlay"></div>
-      <div className="landing-content">
-        <h1 className="app-title">Misión Apocalipsis</h1>
-        <p className="app-description text-size-xl">
-          <strong>Cosmo Coders</strong><br/>
-          Equipo 5
-        </p>
-        <button className="btn-simulacion" onClick={onStart}>
-          <Play size={24} fill="white" />
-          Iniciar Simulación
-        </button>
-        <div style={{
-          marginTop: '2rem',
-          maxWidth: '600px',
-          background: 'rgba(255, 255, 255, 0.1)',
-          padding: '20px',
-          borderRadius: '15px',
-          backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(255, 255, 255, 0.2)'
-        }}>
-          <p style={{ margin: 0, fontSize: '1rem', lineHeight: '1.6', color: '#dfe4ea' }}>
-            <strong>Sistema de Defensa Planetaria</strong><br/>
-            Simula el desvío de asteroides potencialmente peligrosos usando tecnología de impacto cinético. 
-            Podrás cambiar entre vista 3D inmersiva y 2D analítica desde el simulador.
+
+      {/* CONTENIDO PRINCIPAL */}
+      <div className="landing-hero">
+        <div className="landing-content">
+          <h1 className="app-title">Misión Apocalipsis</h1>
+          <p className="app-description text-size-xl">
+            <strong>Cosmo Coders</strong><br />
+            Equipo 5
           </p>
+          <button className="btn-simulacion" onClick={onStart}>
+            <Play size={24} fill="white" />
+            Iniciar Simulación
+          </button>
+
+          <div style={{
+            marginTop: '2rem',
+            maxWidth: '600px',
+            background: 'rgba(255, 255, 255, 0.1)',
+            padding: '20px',
+            borderRadius: '15px',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.2)'
+          }}>
+            <p style={{ margin: 0, fontSize: '1rem', lineHeight: '1.6', color: '#dfe4ea' }}>
+              <strong>Sistema de Defensa Planetaria</strong><br />
+              Simula el desvío de asteroides potencialmente peligrosos usando tecnología de impacto cinético.
+              Podrás cambiar entre vista 3D inmersiva y 2D analítica desde el simulador.
+            </p>
+          </div>
+        </div>
+
+        <div className="scroll-indicator" onClick={scrollToDocs}>
+          <span>Documentación</span>
+          <ChevronDown size={24} />
+        </div>
+      </div>
+
+      {/*DOCUMENTACIÓN TÉCNICA */}
+      <div id="tech-docs" className="doc-section">
+        <div className="doc-container">
+          <h2 className="doc-title">Documentación Técnica</h2>
+
+          <div className="doc-grid">
+            <div className="doc-card">
+              <Code size={32} className="card-icon" />
+              <div className="card-title">Arquitectura Frontend</div>
+              <p className="card-text">
+                Desarrollado como una Single Page Application (SPA) utilizando <strong>React 18</strong>. La gestión de estados complejos se maneja mediante hooks personalizados (useState, useEffect, useRef) para garantizar un rendimiento óptimo en la renderización 3D.
+              </p>
+            </div>
+
+            <div className="doc-card">
+              <Globe size={32} className="card-icon" />
+              <div className="card-title">Motor 3D & Física</div>
+              <p className="card-text">
+                Implementado sobre <strong>Three.js</strong> via <strong>React Three Fiber</strong>. El motor orbital calcula posiciones en tiempo real basándose en los Elementos Keplerianos (semieje mayor, excentricidad, inclinación, etc.) para una precisión astronómica.
+              </p>
+            </div>
+
+            <div className="doc-card">
+              <Cpu size={32} className="card-icon" />
+              <div className="card-title">Shaders GLSL</div>
+              <p className="card-text">
+                Utilizamos <strong>Shaders GLSL</strong> personalizados para el renderizado del Sol (efecto de plasma procedural) y la atmósfera terrestre (dispersión de luz y efecto Fresnel), superando las limitaciones de los materiales estándar de WebGL.
+              </p>
+            </div>
+
+            <div className="doc-card">
+              <Layers size={32} className="card-icon" />
+              <div className="card-title">Sistema de Defensa</div>
+              <p className="card-text">
+                Algoritmos de detección de colisiones y cálculo vectorial para la intercepción de misiles. El sistema evalúa la trayectoria del asteroide y dispara contramedidas cinéticas calculadas para desviar la órbita sin fragmentar el objeto.
+              </p>
+            </div>
+          </div>
+
+          <div className="tech-stack">
+            <h3 style={{ color: '#fff', marginBottom: '15px' }}>Stack Tecnológico</h3>
+            <div className="tech-badges">
+              <span className="badge">React</span>
+              <span className="badge">Three.js</span>
+              <span className="badge">React Three Fiber</span>
+              <span className="badge">Drei</span>
+              <span className="badge">Lucide Icons</span>
+              <span className="badge">GLSL Shaders</span>
+              <span className="badge">Vector Math</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -1451,10 +1660,10 @@ export default App;
 // --- FUNCIONES AUXILIARES DE DIBUJO 2D ---
 const drawStars = (ctx) => {
   ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-  for(let i=0; i<100; i++) {
-     const x = Math.random() * ctx.canvas.width;
-     const y = Math.random() * ctx.canvas.height;
-     ctx.fillRect(x, y, 1.5, 1.5);
+  for (let i = 0; i < 100; i++) {
+    const x = Math.random() * ctx.canvas.width;
+    const y = Math.random() * ctx.canvas.height;
+    ctx.fillRect(x, y, 1.5, 1.5);
   }
 };
 
