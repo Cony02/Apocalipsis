@@ -4,7 +4,6 @@ import { OrbitControls, Html, Line, shaderMaterial } from '@react-three/drei';
 import { AlertTriangle, Info, Shield, Clock, FastForward } from 'lucide-react';
 import * as THREE from 'three';
 
-// --- ESTILOS CSS INCRUSTADOS ---
 const styles = `
   html, body, #root {
     margin: 0;
@@ -60,7 +59,8 @@ const styles = `
   }
 
   .control-panel {
-    margin-bottom: 20px;
+    margin-top: 20px;
+    margin-bottom: 10px;
     padding: 15px;
     background-color: #2f3542;
     border-radius: 8px;
@@ -146,7 +146,6 @@ const AtmosphereMaterial = {
   transparent: true
 };
 
-// 2. Shader del Sol (Plasma Animado)
 const SunMaterial = {
   uniforms: {
     time: { value: 0 },
@@ -182,7 +181,6 @@ const SunMaterial = {
   `
 };
 
-// --- DATOS DEL PYTHON (INTEGRADOS) ---
 const dataDelPython = {
   "Nombre": "109P/Swift-Tuttle",
   "Diametro": 26.0,
@@ -223,8 +221,6 @@ const getOrbitPoints = (a, e, i_deg, om_deg, w_deg, steps = 300) => {
   }
   return points;
 };
-
-// --- COMPONENTES 3D ---
 
 function StarField({ count = 3000 }) {
   const points = useMemo(() => {
@@ -282,7 +278,7 @@ function RealisticSun() {
 function RealisticEarth({ speedMultiplier }) {
   const earthRadiusScale = 5;
   const earthRef = useRef();
-  const angleRef = useRef(0); // Acumulador de ángulo propio
+  const angleRef = useRef(0); 
 
   const orbitPoints = useMemo(() => {
     const points = [];
@@ -299,10 +295,8 @@ function RealisticEarth({ speedMultiplier }) {
   }, [earthRadiusScale]);
 
   useFrame((_, delta) => {
-    // Velocidad base de la tierra: 0.5
     const baseSpeed = 0.5;
 
-    // Acumulamos el ángulo usando el delta time para evitar saltos al cambiar el slider
     angleRef.current += delta * baseSpeed * speedMultiplier;
 
     const x = Math.cos(angleRef.current) * earthRadiusScale;
@@ -311,7 +305,7 @@ function RealisticEarth({ speedMultiplier }) {
     if (earthRef.current) {
       earthRef.current.position.x = x;
       earthRef.current.position.z = z;
-      // Rotación del planeta sobre sí mismo
+      
       earthRef.current.rotation.y += 0.005;
     }
   });
@@ -363,13 +357,12 @@ function AsteroidOrbit({ data, speedMultiplier }) {
   );
 
   const asteroidRef = useRef();
-  const progressRef = useRef(0); // Acumulador de progreso de 0 a 1
+  const progressRef = useRef(0); 
 
   useFrame((_, delta) => {
-    // Velocidad base del asteroide: 0.05
+    
     const baseSpeed = 0.05;
 
-    // Incrementar progreso
     progressRef.current = (progressRef.current + delta * baseSpeed * speedMultiplier) % 1;
 
     const idx = Math.floor(progressRef.current * points.length);
@@ -397,7 +390,6 @@ function AsteroidOrbit({ data, speedMultiplier }) {
         <meshStandardMaterial color="#888888" roughness={0.8} metalness={0.2} />
         <Html distanceFactor={30}>
           <div className="bg-red-600/80 text-white px-2 py-1 rounded text-xs font-bold border border-red-400 whitespace-nowrap pointer-events-none select-none flex items-center gap-1 backdrop-blur-md">
-            <AlertTriangle size={12} />
             {data.Nombre}
           </div>
         </Html>
@@ -408,17 +400,15 @@ function AsteroidOrbit({ data, speedMultiplier }) {
 
 export default function App() {
   const data = dataDelPython;
-  const [speed, setSpeed] = useState(1); // 1 es la velocidad normal
+  const [speed, setSpeed] = useState(1);
 
   return (
     <>
       <style>{styles}</style>
       <div className="app-container">
-        {/* PARTE IZQUIERDA: DATOS */}
         <div className="sidebar">
           <div className="header">
             <div className="flex items-center gap-2 mb-2">
-              <Shield className="text-red-500" size={24} />
               <h1>Alerta de Impacto</h1>
             </div>
             <h2>Parámetros Orbitales</h2>
@@ -426,41 +416,41 @@ export default function App() {
 
           <div className="datos-content">
             <div className="data-row">
-              <span className="text-gray-400">Objeto:</span>
+              <span className="text-gray-400"><strong>Objeto:</strong></span>
               <span className="text-white font-bold">{data.Nombre}</span>
             </div>
             <div className="data-row">
-              <span className="text-gray-400">Diámetro:</span>
+              <span className="text-gray-400"><strong>Diámetro:</strong></span>
               <span className="text-yellow-400 font-bold">{data.Diametro} km</span>
             </div>
             <div className="data-row">
-              <span className="text-gray-400">MOID:</span>
+              <span className="text-gray-400"><strong>MOID:</strong></span>
               <span className="text-red-400 font-bold">{data.MOID} AU</span>
             </div>
             <div className="data-row">
-              <span className="text-gray-400">Semieje (a):</span>
+              <span className="text-gray-400"><strong>Semieje (a):</strong></span>
               <span>{data.Semieje_a} AU</span>
             </div>
             <div className="data-row">
-              <span className="text-gray-400">Excentricidad:</span>
+              <span className="text-gray-400"><strong>Excentricidad:</strong></span>
               <span>{data.Excentricidad_e}</span>
             </div>
             <div className="data-row">
-              <span className="text-gray-400">Inclinación:</span>
+              <span className="text-gray-400"><strong>Inclinación:</strong></span>
               <span>{data.Inclinacion_i}°</span>
             </div>
             <div className="data-row">
-              <span className="text-gray-400">Nodo Asc.:</span>
+              <span className="text-gray-400"><strong>Nodo Asc.:</strong></span>
               <span>{data.Nodo_Asc_om}°</span>
             </div>
             <div className="data-row">
-              <span className="text-gray-400">Arg. Perihelio:</span>
+              <span className="text-gray-400"><strong>Arg. Perihelio:</strong></span>
               <span>{data.Arg_Perihelio_w}°</span>
             </div>
             <div className="control-panel">
                <div className="flex items-center justify-between text-xs text-gray-300 mb-2">
                  <div className="flex items-center gap-1">
-                   <Clock size={14}/> Velocidad de Tiempo
+                   <Clock size={14}/><strong>Velocidad de Tiempo</strong>
                  </div>
                  <span className="text-yellow-400 font-mono">x{speed.toFixed(1)}</span>
                </div>
