@@ -4,6 +4,9 @@ import { OrbitControls, Html, Line } from '@react-three/drei';
 import { AlertTriangle, Info, Shield, Clock, FastForward, Target, Rocket, Play, ChevronLeft } from 'lucide-react';
 import * as THREE from 'three';
 
+// Safety fallback: avoids ReferenceError if a component accidentally references asteroidRef
+const GLOBAL_ASTEROID_REF = React.createRef();
+
 // --- ESTILOS CSS ---
 const styles = `
   html, body, #root {
@@ -359,6 +362,26 @@ const styles = `
   transform: translateY(-2px);
   opacity: 0.9;
 }
+
+/* WAITING OVERLAY */
+.waiting-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2000;
+  background: rgba(0,0,0,0.7);
+  color: #ffdca3;
+  padding: 14px 20px;
+  border-radius: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 8px 30px rgba(0,0,0,0.6);
+  backdrop-filter: blur(6px);
+  text-align: center;
+  font-size: 14px;
+}
 `;
 
 // --- SHADERS AVANZADOS ---
@@ -428,16 +451,16 @@ const SunMaterial = {
 
 // --- DATOS DEL ASTEROIDE ---
 const dataDelPython = {
-  "Nombre": "109P/Swift-Tuttle",
-  "Diametro": 26.0,
-  "MOID": 0.000892,
-  "Semieje_a": 26.09,
-  "Excentricidad_e": 0.9632,
-  "Inclinacion_i": 113.45,
-  "Nodo_Asc_om": 139.38,
-  "Arg_Perihelio_w": 152.98,
-  "Anomalia_Med_ma": 7.63,
-  "Epoca": 2450000.5
+  "Nombre": "4179 Toutatis (1989 AC)",
+  "Diametro": 5.4,            // Asteroide gigante, cumple la regla del 10% + grande
+  "MOID": 0.00651,            // Pasa rozando la Tierra (peligroso)
+  "Semieje_a": 2.543,         // Llega hasta el cinturón de asteroides
+  "Excentricidad_e": 0.6247,  // Órbita muy alargada (cruzadora)
+  "Inclinacion_i": 0.45,      // Muy plano respecto a la Tierra (¡Peligro!)
+  "Nodo_Asc_om": 125.37,
+  "Arg_Perihelio_w": 277.86,
+  "Anomalia_Med_ma": 76.89,
+  "Epoca": 2461000.5
 };
 
 // --- FUNCIONES DE ORBITA ---
@@ -611,88 +634,125 @@ function RealisticEarth({ speedMultiplier, onPositionUpdate }) {
   );
 }
 
-function Missile({ targetPosition, onImpact, isLaunched, asteroidRef }) {
+function Missile({ targetPosition, onDetonation, isLaunched, asteroidRef, earthPosition }) {
   const missileRef = useRef();
-  const startPosition = useMemo(() => [0, 0, 0], []);
-  const impactDetected = useRef(false);
-  const trailPoints = useRef([]);
+  const detonated = useRef(false);
 
-  useFrame((_, delta) => {
-    if (!isLaunched || !missileRef.current || impactDetected.current) return;
+  // Referencia para saber si ya posicionamos el misil en la superficie
+  const hasLaunched = useRef(false);
+
+  useFrame((state, delta) => {
+    if (!isLaunched || !missileRef.current || detonated.current) return;
 
     const missile = missileRef.current;
     const currentPos = missile.position.clone();
-    const target = new THREE.Vector3(...targetPosition);
     
-    const direction = new THREE.Vector3()
-      .subVectors(target, currentPos)
-      .normalize();
-    
-    const speed = 80;
-    missile.position.add(direction.multiplyScalar(speed * delta));
-    
-    if (direction.length() > 0) {
-      missile.lookAt(missile.position.clone().add(direction));
-    }
-    
-    trailPoints.current.push({
-      position: currentPos.clone(),
-      life: 1.0
-    });
-    
-    trailPoints.current = trailPoints.current.filter(point => {
-      point.life -= delta * 3;
-      return point.life > 0;
-    });
-    
-    if (asteroidRef.current) {
-      const asteroidPos = new THREE.Vector3();
+    // Posición del objetivo (Asteroide)
+    const asteroidPos = new THREE.Vector3();
+    if (asteroidRef && asteroidRef.current) {
       asteroidRef.current.getWorldPosition(asteroidPos);
-      
-      const distance = currentPos.distanceTo(asteroidPos);
-      
-      if (distance < 4) {
-        impactDetected.current = true;
-        onImpact();
-        setTimeout(() => { if (missileRef.current) missileRef.current.visible = false; }, 100);
-      }
+    } else {
+      asteroidPos.set(...targetPosition);
+    }
+
+    // --- LÓGICA DE INICIO (SPAWN EN SUPERFICIE) ---
+    // Esto se ejecuta solo en el primer frame del lanzamiento
+    if (!hasLaunched.current && earthPosition) {
+       const earthPosVec = new THREE.Vector3(...earthPosition);
+       // Calculamos vector dirección: Desde Tierra -> Asteroide
+       const directionToTarget = new THREE.Vector3().subVectors(asteroidPos, earthPosVec).normalize();
+       
+       // Radio de la Tierra visual (0.3) + Atmósfera + Margen
+       const SPAWN_OFFSET = 0.8; 
+       
+       // Colocamos el misil en la superficie mirando al objetivo
+       const spawnPos = earthPosVec.add(directionToTarget.multiplyScalar(SPAWN_OFFSET));
+       
+       missile.position.copy(spawnPos);
+       missile.lookAt(asteroidPos);
+       hasLaunched.current = true;
+       missile.visible = true; // Hacemos visible justo ahora
+       return; // Saltamos movimiento este frame para que se asiente
     }
     
-    if (currentPos.length() > 300) {
-      impactDetected.current = true;
-      setTimeout(() => { if (missileRef.current) missileRef.current.visible = false; }, 100);
+    // --- LÓGICA DE INTERCEPCIÓN ---
+    const direction = new THREE.Vector3().subVectors(asteroidPos, currentPos).normalize();
+    const distanceToTarget = currentPos.distanceTo(asteroidPos);
+
+    const STANDOFF_DISTANCE = 1.5;
+
+    if (distanceToTarget < STANDOFF_DISTANCE) {
+      detonated.current = true;
+      missile.visible = false;
+      if (onDetonation) onDetonation(currentPos);
+    } else {
+      const speed = 40; 
+      missile.position.add(direction.multiplyScalar(speed * delta));
+      missile.lookAt(asteroidPos);
+    }
+
+    // Kill switch si se va muy lejos
+    if (currentPos.length() > 1000) {
+      detonated.current = true;
+      missile.visible = false;
     }
   });
 
-  React.useEffect(() => {
-    if (isLaunched) {
-      impactDetected.current = false;
-      trailPoints.current = [];
-      if (missileRef.current) {
-        missileRef.current.visible = true;
-        missileRef.current.position.set(...startPosition);
-      }
+  // Efecto para reiniciar flags si se resetea la simulación
+  useEffect(() => {
+    if (!isLaunched) {
+        hasLaunched.current = false;
+        detonated.current = false;
+        if(missileRef.current) missileRef.current.visible = false;
     }
-  }, [isLaunched, startPosition]);
+  }, [isLaunched]);
 
   return (
     <>
-      {isLaunched && (
-        <group ref={missileRef} position={startPosition}>
-          <mesh>
-            <cylinderGeometry args={[0.05, 0.1, 0.8, 8]} />
-            <meshStandardMaterial color="#ff4757" emissive="#ff0000" />
+      {isLaunched && !detonated.current && (
+        <group ref={missileRef} visible={false}> {/* Empieza invisible */}
+          {/* Geometría del misil */}
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.05, 0.1, 0.6, 8]} />
+            <meshStandardMaterial color="#fff" emissive="#555" />
           </mesh>
-          <pointLight color="#ff6b81" intensity={3} distance={15} decay={2} />
-          {trailPoints.current.map((point, index) => (
-            <mesh key={index} position={point.position}>
-              <sphereGeometry args={[0.02 + point.life * 0.05, 4]} />
-              <meshBasicMaterial color="#ffd700" transparent opacity={point.life * 0.8} />
-            </mesh>
-          ))}
+          {/* Cola de fuego */}
+          <mesh position={[0, 0, 0.4]}>
+            <sphereGeometry args={[0.08, 8, 8]} />
+            <meshBasicMaterial color="orange" />
+          </mesh>
         </group>
       )}
     </>
+  );
+}
+
+// Efecto de onda de choque nuclear
+function Explosion({ position, onComplete }) {
+  const mesh = useRef();
+  
+  useFrame((_, delta) => {
+    if (mesh.current) {
+      // Expansión rápida
+      mesh.current.scale.x += delta * 15;
+      mesh.current.scale.y += delta * 15;
+      mesh.current.scale.z += delta * 15;
+      
+      // Desvanecimiento
+      mesh.current.material.opacity -= delta * 1.5;
+      
+      if (mesh.current.material.opacity <= 0) {
+        onComplete();
+      }
+    }
+  });
+
+  return (
+    <mesh ref={mesh} position={position}>
+      <sphereGeometry args={[0.5, 32, 32]} />
+      <meshBasicMaterial color="#ffaa00" transparent opacity={1} />
+      <pointLight color="#ff5500" intensity={10} distance={20} />
+    </mesh>
   );
 }
 
@@ -785,7 +845,10 @@ function AsteroidOrbit({ data, speedMultiplier, isDeflected, onAsteroidUpdate, a
 }
 
 // --- COMPONENTE DE SIMULACIÓN (Empaqueta todo lo anterior) ---
-function Simulation({ onBack, currentView, onViewChange }) {
+function Simulation({ onBack, currentView, onViewChange, simulationStarted }) {
+  // Always define asteroidRef here to avoid ReferenceError
+  const asteroidRef = useRef();
+
   const data = dataDelPython;
   const [speed, setSpeed] = useState(1);
   const [isDeflected, setIsDeflected] = useState(false);
@@ -795,7 +858,13 @@ function Simulation({ onBack, currentView, onViewChange }) {
   const [asteroidDistance, setAsteroidDistance] = useState(100);
   const [earthPosition, setEarthPosition] = useState([5, 0, 0]);
   const [autoLaunchArmed, setAutoLaunchArmed] = useState(false);
-  const asteroidRef = useRef();
+  const [explosionPos, setExplosionPos] = useState(null);
+  const [launchPending, setLaunchPending] = useState(false);
+
+  // Tuning thresholds: when asteroid < LAUNCH_THRESHOLD we enter "preparing" state;
+  // when asteroid < LAUNCH_RENDER_DISTANCE we actually launch the interceptor (visible).
+  const LAUNCH_THRESHOLD = 30; // begin preparations
+  const LAUNCH_RENDER_DISTANCE = 8; // actual visible launch
 
   const calculateDistanceToEarth = (asteroidPos) => {
     const earthPos = new THREE.Vector3(...earthPosition);
@@ -807,23 +876,22 @@ function Simulation({ onBack, currentView, onViewChange }) {
     return calculateDistanceToEarth(asteroidPosition);
   }, [asteroidPosition, earthPosition]);
 
+  // FIX: define isAsteroidClose used by getStatusMessage and effects
   const isAsteroidClose = currentDistance < 25;
-
+  
   useEffect(() => {
-    if (autoLaunchArmed && isAsteroidClose && missionStatus === 'armed' && !missileLaunched) {
+    if (autoLaunchArmed && currentDistance < LAUNCH_THRESHOLD && missionStatus === 'armed' && !missileLaunched) {
+      setLaunchPending(true);
+    }
+    if (currentDistance < LAUNCH_RENDER_DISTANCE && !missileLaunched) {
       setMissileLaunched(true);
       setMissionStatus('launched');
-      setTimeout(() => {
-        if (missionStatus === 'launched') {
-          setMissileLaunched(false);
-          setMissionStatus('ready');
-          setAutoLaunchArmed(false);
-        }
-      }, 5000);
+      setLaunchPending(false);
     }
-  }, [autoLaunchArmed, isAsteroidClose, missionStatus, missileLaunched]);
+  }, [autoLaunchArmed, currentDistance, missionStatus, missileLaunched, launchPending]);
 
   const handleArmMissile = () => {
+    if (!simulationStarted) return;
     if (missionStatus === 'ready') {
       setMissionStatus('armed');
       setAutoLaunchArmed(true);
@@ -835,11 +903,16 @@ function Simulation({ onBack, currentView, onViewChange }) {
     }
   };
 
-  const handleMissileImpact = () => {
+  // NUEVO: detonación en standoff (recibe posición de detonación)
+  const handleDetonation = (position) => {
     setMissileLaunched(false);
-    setIsDeflected(true);
-    setMissionStatus('success');
-    setAutoLaunchArmed(false);
+    setExplosionPos(position);
+    // Tras la detonación, aplicamos el desvío con pequeño retardo
+    setTimeout(() => {
+      setIsDeflected(true);
+      setMissionStatus('success');
+      setAutoLaunchArmed(false);
+    }, 200);
   };
 
   const getButtonText = () => {
@@ -853,18 +926,13 @@ function Simulation({ onBack, currentView, onViewChange }) {
   };
 
   const getStatusMessage = () => {
-    switch (missionStatus) {
-      case 'armed':
-        return isAsteroidClose ? 
-          <div className="auto-launch-info"> OBJETIVO EN RANGO - LANZANDO MISIL...</div> : 
-          <div className="waiting-for-target"> ESPERANDO QUE EL ASTEROIDE SE ACERQUE...</div>;
-      case 'launched':
-        return <div className="auto-launch-info"> MISIL EN CAMINO HACIA EL OBJETIVO</div>;
-      case 'success':
-        return <div className="success-message">✓ MISIÓN EXITOSA - ASTEROIDE DESVIADO</div>;
-      default:
-        return null;
+    if (missionStatus === 'armed') {
+      if (launchPending) return <div className="auto-launch-info">OBJETIVO EN RANGO - PREPARANDO LANZAMIENTO...</div>;
+      return <div className="waiting-for-target">ESPERANDO QUE EL ASTEROIDE SE ACERQUE...</div>;
     }
+    if (missionStatus === 'launched') return <div className="auto-launch-info">MISIL EN CAMINO HACIA EL OBJETIVO</div>;
+    if (missionStatus === 'success') return <div className="success-message">✓ MISIÓN EXITOSA - ASTEROIDE DESVIADO</div>;
+    return null;
   };
 
   return (
@@ -933,8 +1001,8 @@ function Simulation({ onBack, currentView, onViewChange }) {
             <button 
               className="mission-button"
               onClick={handleArmMissile}
-              disabled={missionStatus === 'launched' || missionStatus === 'armed'}
-              style={{ opacity: (missionStatus === 'launched' || missionStatus === 'armed') ? 0.7 : 1 }}
+              disabled={missionStatus === 'launched' || missionStatus === 'armed' || !simulationStarted}
+              style={{ opacity: (missionStatus === 'launched' || missionStatus === 'armed' || !simulationStarted) ? 0.7 : 1 }}
             >
               <Rocket size={16} />
               {getButtonText()}
@@ -968,6 +1036,12 @@ function Simulation({ onBack, currentView, onViewChange }) {
 
       {/* SCENE 3D */}
       <div className="simulation-container">
+        {/* Overlay logic: waiting -> preparing */}
+        {missionStatus === 'armed' && !missileLaunched && (
+          <div className="waiting-overlay">
+            {launchPending ? 'OBJETIVO EN RANGO - PREPARANDO LANZAMIENTO...' : 'ESPERANDO QUE EL ASTEROIDE ENTRE EN RANGO PARA LANZAR...'}
+          </div>
+        )}
         <Canvas camera={{ position: [0, 60, 120], fov: 45 }}>
           <color attach="background" args={['#000005']} />
           <ambientLight intensity={0.05} />
@@ -982,15 +1056,244 @@ function Simulation({ onBack, currentView, onViewChange }) {
             onDistanceUpdate={setAsteroidDistance}
             asteroidRef={asteroidRef}
           />
-          <Missile 
-            targetPosition={asteroidPosition}
-            onImpact={handleMissileImpact}
-            isLaunched={missileLaunched}
-            asteroidRef={asteroidRef}
-          />
+
+          {/* MISIL solo aparece cuando isLaunched y launchPending son false */}
+          {missileLaunched && (
+            <Missile 
+              targetPosition={asteroidPosition}
+              onDetonation={handleDetonation}
+              isLaunched={missileLaunched}
+              asteroidRef={asteroidRef}
+              earthPosition={earthPosition}
+            />
+          )}
+
+          {/* RENDERIZAR EXPLOSIÓN SI OCURRIÓ */}
+          {explosionPos && (
+            <Explosion 
+              position={explosionPos} 
+              onComplete={() => setExplosionPos(null)} 
+            />
+          )}
+
           <OrbitControls minDistance={5} maxDistance={500} />
           <gridHelper args={[200, 50, 0x222222, 0x111111]} position={[0, -2, 0]} />
         </Canvas>
+      </div>
+    </div>
+  );
+}
+
+// --- COMPONENTE DE SIMULACIÓN 2D ---
+function Simulation2D({ onBack, currentView, onViewChange, simulationStarted }) {
+  const [speed, setSpeed] = useState(1);
+  const [isDeflected, setIsDeflected] = useState(false);
+  const [missileLaunched, setMissileLaunched] = useState(false);
+  const [missionStatus, setMissionStatus] = useState('ready');
+  const [autoLaunchArmed, setAutoLaunchArmed] = useState(false);
+
+  const LAUNCH_THRESHOLD_2D = 150;
+
+  const canvasRef = useRef();
+  const animationRef = useRef();
+  const earthPosRef = useRef({ x: 400, y: 300 });
+  const asteroidPosRef = useRef({ x: 100, y: 100 });
+  const missilePosRef = useRef({ x: 400, y: 300 });
+  const progressRef = useRef(0);
+
+  const [displayDistance, setDisplayDistance] = useState(100);
+  const frameCountRef = useRef(0);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    canvas.width = canvas.parentElement.clientWidth;
+    canvas.height = canvas.parentElement.clientHeight;
+    const ctx = canvas.getContext('2d');
+
+    const renderLoop = () => {
+      ctx.fillStyle = '#000005';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      drawStars(ctx);
+      drawOrbits(ctx);
+
+      const time = Date.now() * 0.001 * speed;
+      earthPosRef.current.x = 400 + Math.cos(time * 0.5) * 120;
+      earthPosRef.current.y = 300 + Math.sin(time * 0.5) * 120;
+
+      progressRef.current += 0.0005 * speed;
+      const angle = progressRef.current * Math.PI * 2;
+      const a = 280;
+      const b = 180;
+      const centerX = 400 - 80;
+      const asteroidX = centerX + Math.cos(angle) * a;
+      const asteroidY = 300 + Math.sin(angle) * b;
+
+      if (isDeflected) {
+        asteroidPosRef.current.x = asteroidX + 60;
+        asteroidPosRef.current.y = asteroidY - 40;
+      } else {
+        asteroidPosRef.current.x = asteroidX;
+        asteroidPosRef.current.y = asteroidY;
+      }
+
+      if (missileLaunched) {
+        const dx = asteroidPosRef.current.x - missilePosRef.current.x;
+        const dy = asteroidPosRef.current.y - missilePosRef.current.y;
+        const distToTarget = Math.sqrt(dx*dx + dy*dy);
+        if (distToTarget < 20) {
+          handleMissileImpact();
+        } else {
+          const velocity = 3 * speed;
+          missilePosRef.current.x += (dx / distToTarget) * velocity;
+          missilePosRef.current.y += (dy / distToTarget) * velocity;
+        }
+      } else {
+        missilePosRef.current.x = earthPosRef.current.x;
+        missilePosRef.current.y = earthPosRef.current.y;
+      }
+
+      drawEarth(ctx, earthPosRef.current.x, earthPosRef.current.y);
+      drawAsteroid(ctx, asteroidPosRef.current.x, asteroidPosRef.current.y, isDeflected);
+
+      if (missileLaunched) {
+        drawMissile(ctx, missilePosRef.current.x, missilePosRef.current.y);
+      }
+
+      drawInfo(ctx);
+
+      const distEarthAsteroid = Math.sqrt(
+        Math.pow(asteroidPosRef.current.x - earthPosRef.current.x, 2) +
+        Math.pow(asteroidPosRef.current.y - earthPosRef.current.y, 2)
+      );
+
+      frameCountRef.current++;
+      if (frameCountRef.current > 10) {
+        setDisplayDistance(distEarthAsteroid);
+        frameCountRef.current = 0;
+      }
+
+      if (autoLaunchArmed && missionStatus === 'armed' && !missileLaunched && distEarthAsteroid < LAUNCH_THRESHOLD_2D) {
+        setMissileLaunched(true);
+        setMissionStatus('launched');
+      }
+
+      animationRef.current = requestAnimationFrame(renderLoop);
+    };
+
+    renderLoop();
+
+    return () => {
+      cancelAnimationFrame(animationRef.current);
+    };
+  }, [speed, isDeflected, missileLaunched, missionStatus, autoLaunchArmed]);
+
+  const handleMissileImpact = () => {
+    setMissileLaunched(false);
+    setIsDeflected(true);
+    setMissionStatus('success');
+    setAutoLaunchArmed(false);
+  };
+
+  const handleArmToggle = () => {
+    if (missionStatus === 'ready') {
+      setMissionStatus('armed');
+      setAutoLaunchArmed(true);
+    } else if (missionStatus === 'success') {
+      setMissionStatus('ready');
+      setIsDeflected(false);
+      setMissileLaunched(false);
+      setAutoLaunchArmed(false);
+    }
+  };
+
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%', background: '#000005' }}>
+      <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
+      <div className="view-toggle">
+        <button
+          className={`view-button view-button-3d ${currentView === '3D' ? 'view-button-active' : ''}`}
+          onClick={() => onViewChange('3D')}
+        >
+          🌌 3D
+        </button>
+        <button
+          className={`view-button view-button-2d ${currentView === '2D' ? 'view-button-active' : ''}`}
+          onClick={() => onViewChange('2D')}
+        >
+          📊 2D
+        </button>
+      </div>
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        width: '100%',
+        padding: '10px',
+        pointerEvents: 'none',
+        zIndex: 10
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background:'rgba(0,0,0,0.5)', padding:'5px', borderRadius:'8px' }}>
+            <Shield style={{ color: '#ff4757' }} size={24} />
+            <h1 style={{ fontSize: '1.2rem', margin: 0, color:'white' }}>Vista Táctica 2D</h1>
+          </div>
+          <button
+            className="back-button"
+            onClick={onBack}
+            style={{ pointerEvents: 'auto', marginLeft: 'auto' }}
+          >
+            <ChevronLeft size={14} /> Volver al Inicio
+          </button>
+        </div>
+        <div style={{
+          position: 'absolute',
+          top: '60px',
+          left: '10px',
+          width: '280px',
+          background: 'rgba(20, 20, 20, 0.9)',
+          padding: '15px',
+          borderRadius: '8px',
+          border: '1px solid #333',
+          pointerEvents: 'auto'
+        }}>
+          <div style={{ marginBottom: '10px', fontSize: '0.9rem', color: '#a4b0be' }}>
+            Distancia Tierra-Obj: <strong style={{ color: displayDistance < 150 ? '#ff4757' : 'white' }}>{displayDistance.toFixed(1)} km</strong>
+          </div>
+          <div style={{
+            padding: '10px',
+            background: missionStatus === 'success' ? 'rgba(46, 213, 115, 0.2)' : 'rgba(255, 71, 87, 0.1)',
+            borderRadius: '6px',
+            border: missionStatus === 'success' ? '1px solid #2ed573' : '1px solid #ff4757',
+            marginBottom: '15px',
+            textAlign: 'center'
+          }}>
+            <div style={{fontWeight:'bold', color: missionStatus === 'success' ? '#2ed573' : '#ff4757', marginBottom:'5px'}}>
+              ESTADO: {missionStatus.toUpperCase()}
+            </div>
+            {missionStatus === 'armed' && <div className="waiting-for-target">RADAR ACTIVO</div>}
+          </div>
+          <button
+            className="mission-button"
+            onClick={handleArmToggle}
+            disabled={missionStatus === 'launched'}
+            style={{ opacity: missionStatus === 'launched' ? 0.5 : 1 }}
+          >
+            <Rocket size={16} />
+            {missionStatus === 'success' ? 'REINICIAR SISTEMA' : (missionStatus === 'armed' ? 'DESARMAR' : 'ARMAR INTERCEPTOR')}
+          </button>
+          <div style={{ marginTop: '20px', borderTop: '1px solid #333', paddingTop: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', color: '#a4b0be', fontSize:'0.8rem', marginBottom:'5px' }}>
+              <Clock size={12}/> Velocidad Simulación (x{speed})
+            </div>
+            <input
+              type="range" min="0" max="5" step="0.1" value={speed}
+              onChange={(e) => setSpeed(parseFloat(e.target.value))}
+              className="slider"
+              style={{ width: '100%' }}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -1000,7 +1303,6 @@ function Simulation({ onBack, currentView, onViewChange }) {
 function LandingPage({ onStart }) {
   return (
     <div className="landing-container">
-      {/* VIDEO DE FONDO */}
       <video 
         className="video-bg" 
         autoPlay 
@@ -1010,21 +1312,16 @@ function LandingPage({ onStart }) {
         muted
       />
       <div className="video-overlay"></div>
-      
       <div className="landing-content">
         <h1 className="app-title">Misión Apocalipsis</h1>
         <p className="app-description text-size-xl">
           <strong>Cosmo Coders</strong><br/>
           Equipo 5
         </p>
-        
-        {/* BOTÓN ÚNICO DE INICIAR */}
         <button className="btn-simulacion" onClick={onStart}>
           <Play size={24} fill="white" />
           Iniciar Simulación
         </button>
-
-        {/* DESCRIPCIÓN SIMPLIFICADA */}
         <div style={{
           marginTop: '2rem',
           maxWidth: '600px',
@@ -1042,391 +1339,15 @@ function LandingPage({ onStart }) {
         </div>
       </div>
     </div>
-  )
-}
-
-// --- COMPONENTE DE SIMULACIÓN 2D ---
-function Simulation2D({ onBack, currentView, onViewChange }) {
-  const [speed, setSpeed] = useState(1);
-  const [isDeflected, setIsDeflected] = useState(false);
-  const [missileLaunched, setMissileLaunched] = useState(false);
-  const [missionStatus, setMissionStatus] = useState('ready');
-  const [autoLaunchArmed, setAutoLaunchArmed] = useState(false);
-  
-  const canvasRef = useRef();
-  const animationRef = useRef();
-  const earthPosRef = useRef({ x: 400, y: 300 });
-  const asteroidPosRef = useRef({ x: 100, y: 100 });
-  const missilePosRef = useRef({ x: 400, y: 300 });
-  const progressRef = useRef(0);
-
-  const data = {
-    "Nombre": "109P/Swift-Tuttle",
-    "Diametro": 26.0,
-    "MOID": 0.000892,
-    "Semieje_a": 26.09,
-  };
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    
-    const draw = () => {
-      // Limpiar canvas
-      ctx.fillStyle = '#000005';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      // Dibujar estrellas de fondo
-      drawStars(ctx);
-      
-      // Dibujar órbitas
-      drawOrbits(ctx);
-      
-      // Dibujar Tierra
-      drawEarth(ctx, earthPosRef.current.x, earthPosRef.current.y);
-      
-      // Dibujar asteroide
-      drawAsteroid(ctx, asteroidPosRef.current.x, asteroidPosRef.current.y, isDeflected);
-      
-      // Dibujar misil si está lanzado
-      if (missileLaunched) {
-        drawMissile(ctx, missilePosRef.current.x, missilePosRef.current.y);
-      }
-      
-      // Dibujar información
-      drawInfo(ctx);
-    };
-    
-    const updatePositions = () => {
-      // Actualizar posición de la Tierra (órbita circular)
-      const time = Date.now() * 0.001 * speed;
-      earthPosRef.current.x = 400 + Math.cos(time * 0.5) * 150;
-      earthPosRef.current.y = 300 + Math.sin(time * 0.5) * 150;
-      
-      // Actualizar posición del asteroide (órbita elíptica)
-      progressRef.current += 0.002 * speed;
-      const asteroidAngle = progressRef.current * Math.PI * 2;
-      const asteroidX = 400 + Math.cos(asteroidAngle) * 250;
-      const asteroidY = 300 + Math.sin(asteroidAngle) * 150;
-      
-      // Aplicar desviación si está activa
-      if (isDeflected) {
-        asteroidPosRef.current.x = asteroidX + 50;
-        asteroidPosRef.current.y = asteroidY - 30;
-      } else {
-        asteroidPosRef.current.x = asteroidX;
-        asteroidPosRef.current.y = asteroidY;
-      }
-      
-      // Actualizar misil
-      if (missileLaunched) {
-        const targetX = asteroidPosRef.current.x;
-        const targetY = asteroidPosRef.current.y;
-        const dx = targetX - missilePosRef.current.x;
-        const dy = targetY - missilePosRef.current.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        
-        if (distance < 15) {
-          // Impacto detectado
-          handleMissileImpact();
-        } else {
-          // Mover misil hacia el asteroide
-          missilePosRef.current.x += (dx / distance) * 8 * speed;
-          missilePosRef.current.y += (dy / distance) * 8 * speed;
-        }
-      }
-      
-      // Verificar auto-lanzamiento
-      const distanceToEarth = Math.sqrt(
-        Math.pow(asteroidPosRef.current.x - earthPosRef.current.x, 2) +
-        Math.pow(asteroidPosRef.current.y - earthPosRef.current.y, 2)
-      );
-      
-      if (autoLaunchArmed && distanceToEarth < 100 && missionStatus === 'armed' && !missileLaunched) {
-        setMissileLaunched(true);
-        setMissionStatus('launched');
-        missilePosRef.current = { ...earthPosRef.current };
-      }
-    };
-    
-    const gameLoop = () => {
-      updatePositions();
-      draw();
-      animationRef.current = requestAnimationFrame(gameLoop);
-    };
-    
-    gameLoop();
-    
-    return () => {
-      cancelAnimationFrame(animationRef.current);
-    };
-  }, [speed, isDeflected, missileLaunched, missionStatus, autoLaunchArmed]);
-
-  const drawStars = (ctx) => {
-    ctx.fillStyle = '#ffffff';
-    for (let i = 0; i < 100; i++) {
-      const x = (i * 13) % 800;
-      const y = (i * 7) % 600;
-      const size = Math.random() * 1.5;
-      ctx.beginPath();
-      ctx.arc(x, y, size, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  };
-
-  const drawOrbits = (ctx) => {
-    // Órbita de la Tierra
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(400, 300, 150, 0, Math.PI * 2);
-    ctx.stroke();
-    
-    // Órbita del asteroide
-    ctx.strokeStyle = isDeflected ? 'rgba(46, 213, 115, 0.6)' : 'rgba(255, 71, 87, 0.6)';
-    ctx.setLineDash(isDeflected ? [5, 5] : []);
-    ctx.beginPath();
-    ctx.ellipse(400, 300, 250, 150, 0, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  };
-
-  const drawEarth = (ctx, x, y) => {
-    // Tierra
-    ctx.fillStyle = '#1e4e8c';
-    ctx.beginPath();
-    ctx.arc(x, y, 20, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Atmosfera
-    ctx.strokeStyle = 'rgba(64, 144, 226, 0.5)';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(x, y, 25, 0, Math.PI * 2);
-    ctx.stroke();
-    
-    // Etiqueta
-    ctx.fillStyle = 'rgba(30, 78, 140, 0.9)';
-    ctx.fillRect(x - 25, y - 40, 50, 20);
-    ctx.fillStyle = 'white';
-    ctx.font = '12px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('TIERRA', x, y - 28);
-  };
-
-  const drawAsteroid = (ctx, x, y, deflected) => {
-    // Asteroide
-    ctx.fillStyle = deflected ? '#2ed573' : '#888888';
-    ctx.beginPath();
-    ctx.arc(x, y, 15, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Detalles del asteroide
-    ctx.fillStyle = deflected ? '#1dd1a1' : '#666666';
-    ctx.beginPath();
-    ctx.arc(x - 5, y - 3, 4, 0, Math.PI * 2);
-    ctx.arc(x + 6, y + 4, 3, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Etiqueta
-    ctx.fillStyle = deflected ? 'rgba(46, 213, 115, 0.9)' : 'rgba(255, 71, 87, 0.9)';
-    ctx.fillRect(x - 40, y - 40, 80, 20);
-    ctx.fillStyle = 'white';
-    ctx.font = 'bold 12px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${data.Nombre} ${deflected ? '✓' : ''}`, x, y - 28);
-  };
-
-  const drawMissile = (ctx, x, y) => {
-    ctx.fillStyle = '#ff4757';
-    ctx.beginPath();
-    ctx.moveTo(x, y - 8);
-    ctx.lineTo(x - 4, y + 8);
-    ctx.lineTo(x + 4, y + 8);
-    ctx.closePath();
-    ctx.fill();
-    
-    // Llama del misil
-    ctx.fillStyle = '#ffa502';
-    ctx.beginPath();
-    ctx.moveTo(x, y + 8);
-    ctx.lineTo(x - 3, y + 15);
-    ctx.lineTo(x + 3, y + 15);
-    ctx.closePath();
-    ctx.fill();
-  };
-
-  const drawInfo = (ctx) => {
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    ctx.font = '14px Arial';
-    ctx.textAlign = 'left';
-    ctx.fillText(`Velocidad: x${speed.toFixed(1)}`, 20, 30);
-    ctx.fillText(`Estado: ${isDeflected ? 'DESVIADO' : 'AMENAZA'}`, 20, 50);
-    ctx.fillText(`Misil: ${missileLaunched ? 'ACTIVO' : 'INACTIVO'}`, 20, 70);
-  };
-
-  const handleArmMissile = () => {
-    if (missionStatus === 'ready') {
-      setMissionStatus('armed');
-      setAutoLaunchArmed(true);
-    } else if (missionStatus === 'success') {
-      resetMission();
-    }
-  };
-
-  const handleMissileImpact = () => {
-    setMissileLaunched(false);
-    setIsDeflected(true);
-    setMissionStatus('success');
-    setAutoLaunchArmed(false);
-  };
-
-  const resetMission = () => {
-    setIsDeflected(false);
-    setMissileLaunched(false);
-    setMissionStatus('ready');
-    setAutoLaunchArmed(false);
-    progressRef.current = 0;
-  };
-
-  const getButtonText = () => {
-    switch (missionStatus) {
-      case 'ready': return 'ARMAR SISTEMA DE AUTO-LANZAMIENTO';
-      case 'armed': return 'SISTEMA ARMADO - ESPERANDO OBJETIVO';
-      case 'launched': return 'MISIL EN CAMINO...';
-      case 'success': return 'REINICIAR SIMULACIÓN';
-      default: return 'ARMAR SISTEMA';
-    }
-  };
-
-  const getStatusMessage = () => {
-    switch (missionStatus) {
-      case 'armed':
-        const distanceToEarth = Math.sqrt(
-          Math.pow(asteroidPosRef.current.x - earthPosRef.current.x, 2) +
-          Math.pow(asteroidPosRef.current.y - earthPosRef.current.y, 2)
-        );
-        return distanceToEarth < 100 ? 
-          <div className="auto-launch-info">OBJETIVO EN RANGO - LANZANDO MISIL...</div> : 
-          <div className="waiting-for-target">ESPERANDO QUE EL ASTEROIDE SE ACERQUE...</div>;
-      case 'launched':
-        return <div className="auto-launch-info">MISIL EN CAMINO HACIA EL OBJETIVO</div>;
-      case 'success':
-        return <div className="success-message">✓ MISIÓN EXITOSA - ASTEROIDE DESVIADO</div>;
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <div className="app-container">
-      {/* BOTONES DE CAMBIO DE VISTA */}
-      <div className="view-toggle">
-        <button 
-          className={`view-button view-button-3d ${currentView === '3D' ? 'view-button-active' : ''}`}
-          onClick={() => onViewChange('3D')}
-        >
-          🌌 3D
-        </button>
-        <button 
-          className={`view-button view-button-2d ${currentView === '2D' ? 'view-button-active' : ''}`}
-          onClick={() => onViewChange('2D')}
-        >
-          📊 2D
-        </button>
-      </div>
-
-      {/* SIDEBAR */}
-      <div className="sidebar">
-        <div className="header" style={{marginTop: '30px'}}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-            <Shield style={{ color: '#ff4757' }} size={24} />
-            <h1>Alerta de Impacto</h1>
-          </div>
-          <h2>Vista 2D - Simulación Orbital</h2>
-        </div>
-
-        <div className="datos-content">
-          <div className="data-row">
-            <span style={{ color: '#a4b0be' }}>Objeto:</span>
-            <span style={{ color: 'white', fontWeight: 'bold' }}>{data.Nombre}</span>
-          </div>
-          <div className="data-row">
-            <span style={{ color: '#a4b0be' }}>Diámetro:</span>
-            <span style={{ color: '#ffa502', fontWeight: 'bold' }}>{data.Diametro} km</span>
-          </div>
-          <div className="data-row">
-            <span style={{ color: '#a4b0be' }}>MOID:</span>
-            <span style={{ color: '#ff4757', fontWeight: 'bold' }}>{data.MOID} AU</span>
-          </div>
-          
-          <div className="mission-control">
-            <div className="mission-title">
-              <Target size={20} />
-              Sistema de Defensa
-            </div>
-            
-            {getStatusMessage()}
-            
-            <button 
-              className="mission-button"
-              onClick={handleArmMissile}
-              disabled={missionStatus === 'launched' || missionStatus === 'armed'}
-              style={{ opacity: (missionStatus === 'launched' || missionStatus === 'armed') ? 0.7 : 1 }}
-            >
-              <Rocket size={16} />
-              {getButtonText()}
-            </button>
-
-            <div className="trajectory-info">
-              <div><strong>Estado:</strong> {isDeflected ? '🟢 DESVIADO' : missionStatus === 'armed' ? '🟡 ARMADO' : '🔴 LISTO'}</div>
-              <div><strong>Auto-lanzamiento:</strong> {autoLaunchArmed ? '🟢 ACTIVADO' : '🔴 DESACTIVADO'}</div>
-            </div>
-          </div>
-
-          <div className="control-panel">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '12px', color: '#a4b0be', marginBottom: '8px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <Clock size={14}/> Velocidad de Tiempo
-              </div>
-              <span style={{ color: '#ffa502', fontFamily: 'monospace' }}>x{speed.toFixed(1)}</span>
-            </div>
-            <div className="slider-container">
-              <span style={{ fontSize: '12px', color: '#666' }}>0</span>
-              <input 
-                type="range" min="0" max="5" step="0.1" value={speed}
-                onChange={(e) => setSpeed(parseFloat(e.target.value))}
-                className="slider"
-              />
-              <FastForward size={14} style={{ color: '#666' }}/>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* CANVAS 2D */}
-      <div className="simulation-container">
-        <canvas 
-          ref={canvasRef}
-          width={800}
-          height={600}
-          style={{
-            border: '2px solid #333',
-            borderRadius: '8px',
-            background: '#000005'
-          }}
-        />
-      </div>
-    </div>
   );
 }
 
-// --- COMPONENTE PRINCIPAL QUE GESTIONA LAS VISTAS ---
-export default function App() {
+// --- APP PRINCIPAL ---
+function App() {
   const [currentView, setCurrentView] = useState('landing');
   const [simulationView, setSimulationView] = useState('3D');
+  const [simulationStarted, setSimulationStarted] = useState(false);
 
-  // Efecto para cambiar entre vistas 2D y 3D automáticamente
   useEffect(() => {
     if (currentView.startsWith('simulation')) {
       if (simulationView === '3D' && currentView !== 'simulation3D') {
@@ -1440,19 +1361,166 @@ export default function App() {
   const renderView = () => {
     switch (currentView) {
       case 'simulation3D':
-        return <Simulation onBack={() => setCurrentView('landing')} currentView={simulationView} onViewChange={setSimulationView} />;
+        return (
+          <Simulation
+            onBack={() => {
+              setCurrentView('landing');
+              setSimulationStarted(false);
+            }}
+            currentView={simulationView}
+            onViewChange={setSimulationView}
+            simulationStarted={simulationStarted}
+          />
+        );
       case 'simulation2D':
-        return <Simulation2D onBack={() => setCurrentView('landing')} currentView={simulationView} onViewChange={setSimulationView} />;
+        return (
+          <Simulation2D
+            onBack={() => {
+              setCurrentView('landing');
+              setSimulationStarted(false);
+            }}
+            currentView={simulationView}
+            onViewChange={setSimulationView}
+            simulationStarted={simulationStarted}
+          />
+        );
       case 'landing':
       default:
-        return <LandingPage onStart={() => { setCurrentView('simulation3D'); setSimulationView('3D'); }} />;
+        return (
+          <LandingPage
+            onStart={() => {
+              setCurrentView('simulation3D');
+              setSimulationView('3D');
+              setSimulationStarted(true);
+            }}
+          />
+        );
     }
   };
+
+  // Error boundary to avoid a blank screen on runtime errors and allow a graceful reset
+  class ErrorBoundary extends React.Component {
+    constructor(props) {
+      super(props);
+      this.state = { hasError: false, error: null, info: null };
+    }
+    static getDerivedStateFromError(error) {
+      return { hasError: true, error };
+    }
+    componentDidCatch(error, info) {
+      console.error('ErrorBoundary caught:', error, info);
+      this.setState({ info });
+    }
+    render() {
+      if (!this.state.hasError) return this.props.children;
+      return (
+        <div style={{
+          position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.85)', color: '#fff', zIndex: 9999, padding: 20, textAlign: 'center'
+        }}>
+          <div style={{ maxWidth: 800 }}>
+            <h2 style={{ marginTop: 0 }}>Se produjo un error en la simulación</h2>
+            <p>Por favor, vuelve a la pantalla principal o revisa la consola para más detalles.</p>
+            <pre style={{ textAlign: 'left', maxHeight: 200, overflow: 'auto', background: '#111', padding: 10, borderRadius: 6 }}>
+              {this.state.error && this.state.error.toString()}
+              {this.state.info && '\n' + (this.state.info.componentStack || '')}
+            </pre>
+            <div style={{ marginTop: 12, display: 'flex', gap: 8, justifyContent: 'center' }}>
+              <button onClick={() => { this.setState({ hasError: false, error: null, info: null }); if (this.props.onReset) this.props.onReset(); }} style={{ padding: '8px 14px', borderRadius: 6, cursor: 'pointer' }}>
+                Volver al Inicio
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+  }
 
   return (
     <>
       <style>{styles}</style>
-      {renderView()}
+      <ErrorBoundary onReset={() => { setCurrentView('landing'); setSimulationView('3D'); }}>
+        {renderView()}
+      </ErrorBoundary>
     </>
   );
 }
+
+export default App;
+
+// --- FUNCIONES AUXILIARES DE DIBUJO 2D ---
+const drawStars = (ctx) => {
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+  for(let i=0; i<100; i++) {
+     const x = Math.random() * ctx.canvas.width;
+     const y = Math.random() * ctx.canvas.height;
+     ctx.fillRect(x, y, 1.5, 1.5);
+  }
+};
+
+const drawOrbits = (ctx) => {
+  const cx = 400;
+  const cy = 300;
+  ctx.strokeStyle = 'rgba(100, 149, 237, 0.3)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, 120, 120, 0, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(255, 71, 87, 0.2)';
+  ctx.setLineDash([5, 5]);
+  ctx.beginPath();
+  ctx.ellipse(cx - 80, cy, 280, 180, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = '#ffaa00';
+  ctx.shadowBlur = 20;
+  ctx.shadowColor = '#ffaa00';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 15, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+};
+
+const drawEarth = (ctx, x, y) => {
+  ctx.fillStyle = '#1e4e8c';
+  ctx.beginPath();
+  ctx.arc(x, y, 8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#4a90e2';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = 'white';
+  ctx.font = '12px Arial';
+  ctx.fillText('Tierra', x - 15, y - 15);
+};
+
+const drawAsteroid = (ctx, x, y, isDeflected) => {
+  ctx.fillStyle = isDeflected ? '#2ed573' : '#a4b0be';
+  ctx.beginPath();
+  ctx.arc(x, y, 6, 0, Math.PI * 2);
+  ctx.fill();
+  if (!isDeflected) {
+    ctx.strokeStyle = '#ff4757';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+};
+
+const drawMissile = (ctx, x, y) => {
+  ctx.fillStyle = '#ffa502';
+  ctx.beginPath();
+  ctx.arc(x, y, 3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255, 165, 2, 0.6)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x - 5, y - 5);
+  ctx.stroke();
+};
+
+const drawInfo = (ctx) => {
+  // Vacío, solo para evitar crash.
+};
