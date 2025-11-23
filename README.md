@@ -11,22 +11,7 @@ Identificar y visualizar el asteroide más peligroso según criterios NASA: **"E
 - **MOID**: 0.000892 AU
 - **Criterio**: Mayor diámetro dentro del 10% con menor distancia de intersección orbital
 
-## Instalación
-
-```bash
-# Clonar repositorio
-git clone [url-del-repo]
-
-# Instalar dependencias
-npm install
-
-# Ejecutar en desarrollo
-npm start
-
-# Build para producción
-npm run build
-
-# 🔭 Justificación Científica: Simulación de Desvío del Asteroide 4179 Toutatis
+# Justificación Científica: Simulación de Desvío del Asteroide 4179 Toutatis
 
 **Equipo:** Cosmo Coders (Equipo 5)  
 **Proyecto:** Misión Apocalipsis - Sistema de Defensa Planetaria
@@ -122,3 +107,18 @@ Para fines de demostración y experiencia de usuario (UX), la simulación emplea
 * **En la Simulación:** Hemos aplicado un cambio de **$8^\circ$** en la inclinación y un empuje visual al semieje mayor.
 
 **Justificación:** Se aplica una exageración visual (*Visual Scaling Factor $\approx 1000x$*) para que el cambio de órbita y el éxito de la misión sean perceptibles e intuitivos para el usuario en la interfaz 3D.
+
+## Instalación
+
+```bash
+# Clonar repositorio
+git clone [url-del-repo]
+
+# Instalar dependencias
+npm install
+
+# Ejecutar en desarrollo
+npm start
+
+# Build para producción
+npm run build 
